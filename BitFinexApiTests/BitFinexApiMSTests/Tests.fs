@@ -27,6 +27,18 @@ module MSTests =
             Assert.IsTrue(pairs |> (not << Seq.isEmpty));
 
         [<TestMethod>]
+        member this.AsyncGetSupportedPairs () =
+            let pairs = (api :> IBitFinexApi).AsyncGetSupportedPairs() |> Async.RunSynchronously
+            Assert.IsTrue(Seq.forall (fun (x : PairClass) -> x.BaseCurrency.Length = 3 && x.CounterCurrency.Length = 3) pairs)
+            Assert.IsTrue(pairs |> (not << Seq.isEmpty));
+        
+        [<TestMethod>]
+        member this.GetSupportedPairsAsync () =
+            let pairs = (api :> IBitFinexApi).GetSupportedPairsAsync() |> Async.AwaitTask |> Async.RunSynchronously
+            Assert.IsTrue(Seq.forall (fun (x : PairClass) -> x.BaseCurrency.Length = 3 && x.CounterCurrency.Length = 3) pairs)
+            Assert.IsTrue(pairs |> (not << Seq.isEmpty));
+
+        [<TestMethod>]
         member this.GetPairDetails () =
             let pairDetails = (api :> IBitFinexApi).GetPairDetails()
             Assert.IsTrue(pairDetails |> (not << Seq.isEmpty));

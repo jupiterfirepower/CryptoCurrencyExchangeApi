@@ -1,6 +1,7 @@
 namespace CryptCurrency.BitFinex
 
 open System
+open System.Threading.Tasks
 open System.Net
 open System.Collections.Generic
 open CryptCurrency.Common.DataContracts
@@ -73,7 +74,6 @@ module Utils =
                                                                    dtDateTime
 
     let addDecompression (req: HttpWebRequest) =
-        //req.Timeout <- 5000
         req.AutomaticDecompression <- DecompressionMethods.GZip ||| DecompressionMethods.Deflate
         req
 
@@ -109,6 +109,8 @@ module WebApi =
     [<Interface>]
     type IBitFinexApi =
         abstract GetSupportedPairs: unit -> seq<PairClass>
+        abstract GetSupportedPairsAsync: unit -> Task<seq<PairClass>>
+        abstract AsyncGetSupportedPairs: unit -> Async<seq<PairClass>>
         abstract GetPairDetails: unit -> seq<BitFinexPairDetails>
         abstract GetTickers: PairClass -> BitFinexTicker
         abstract GetStats: PairClass -> seq<BitFinexStats>
@@ -141,11 +143,11 @@ module WebApi =
                                     let result = pairDetails |> Seq.map (fun x -> { Pair = x.Pair; PricePrecision = x.PricePrecision; InitialMargin = x.InitialMargin; MinimumMargin = x.MinimumMargin; MaximumOrderSize = x.MaximumOrderSize; Expiration = x.Expiration; Margin = x.Margin }); 
                                     result
 
-    let GetSupportedPairsAsync = async{  let! pairs =  Http.AsyncRequestString(baseUrl +^ symbols)
-                                         let pairs = BitFinexPair.Parse(pairs)
-                                         let result = pairs |> Seq.map (fun x -> let data = x.toArrayByChunkSize(3)
-                                                                                 PairClass(data.[0], data.[1]))
-                                         return result  }
+    let GetSupportedPairsAsync webtimeout = async{  let! pairs =  Http.AsyncRequestString(baseUrl +^ symbols, httpMethod = Get, headers = [ Accept HttpContentTypes.Json; ContentType HttpContentTypes.Json ], customizeHttpRequest = addDecompression, timeout = webtimeout)
+                                                    let pairs = BitFinexPair.Parse(pairs)
+                                                    let result = pairs |> Seq.map (fun x -> let data = x.toArrayByChunkSize(3)
+                                                                                            PairClass(data.[0], data.[1]))
+                                                    return result  }
 
     //let GetActiveOrders = let methods = apiVersion ^ "orders"
     //                      let data = BitFinexOrderStatus.Parse(PrivateQuery("","", baseUrl ^ methods, [ ("request", ("/" ^ methods) :> obj); ("nonce", (Convert.ToString(getNonce)) :> obj) ]))
@@ -193,6 +195,11 @@ module WebApi =
                                            with
                                               _ -> reraise()
 
+                                              
+            member x.AsyncGetSupportedPairs() = GetSupportedPairsAsync webtimeout
+            /// Expose C#-friendly asynchronous method that returns Task
+            member x.GetSupportedPairsAsync() = Async.StartAsTask((GetSupportedPairsAsync webtimeout)) 
+
             member x.GetPairDetails() = try
                                               let pairDetails = retryHelper (GetPairDetails webtimeout) defaultRetryParams
                                               pairDetails
@@ -234,6 +241,9 @@ module WebApi =
                                                     with
                                                         _ -> reraise()
          member x.GetSupportedPairs() = (x :> IBitFinexApi).GetSupportedPairs
+         member x.AsyncGetSupportedPairs() = (x :> IBitFinexApi).AsyncGetSupportedPairs
+         /// Expose C#-friendly asynchronous method that returns Task
+         member x.GetSupportedPairsAsync() = (x :> IBitFinexApi).GetSupportedPairsAsync
          member x.GetPairDetails() = (x :> IBitFinexApi).GetPairDetails
          member x.GetTickers(pair:PairClass) = (x :> IBitFinexApi).GetTickers(pair)
          member x.GetStats(pair:PairClass) = (x :> IBitFinexApi).GetStats(pair)
