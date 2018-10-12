@@ -8,6 +8,7 @@
    <br>IBitFinexApi
    <br>BitFinexApi(key:string, secret:string, ?timeout:int)
    <br>Sample Using:
-<br>&nbsp;&nbsp;&nbsp;let api = BitFinexApi(apiKey,apiSecret, 5000) //5000 ms -> 5 seconds timeout for web request
-<br>&nbsp;&nbsp;&nbsp;let pairs = api.GetSupportedPairs()
-<br>&nbsp;&nbsp;&nbsp;let pairs = (api :> IBitFinexApi).GetSupportedPairs()
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;let api = BitFinexApi(apiKey,apiSecret, 5000) //5000 ms -> 5 seconds timeout for web request
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;let pairs = api.GetSupportedPairs()
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;let pairs = (api :> IBitFinexApi).GetSupportedPairs()
+<br>See unit tests for details
