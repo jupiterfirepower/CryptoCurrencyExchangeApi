@@ -21,7 +21,6 @@ module StringEx =
 
 module Retry =
     open System.Threading
-    open System
 
     type RetryParams = {
         maxRetries : int; waitBetweenRetries : int
@@ -90,7 +89,6 @@ module Helpers=
 module DataContracts =
 
     open SupportedCurrency
-    open System
     open System.Collections.Generic
     open System.Linq
     open System.Collections.Concurrent
@@ -405,8 +403,8 @@ module DataContracts =
                                                          order.Underlying |> Seq.iter (fun x -> self.Underlying.Add(x))
 
         type OrderBook(bids : seq<Order>, asks : seq<Order>, exchange : string, pair : PairClass, time : DateTime) =
-             member x.Asks = new ConcurrentBag<Order>(asks.OrderByDescending(fun x -> x.Price))
-             member x.Bids = new ConcurrentBag<Order>(bids.OrderBy(fun x -> x.Price))
+             member x.Asks = seq<Order> { for it in asks.OrderByDescending(fun x -> x.Price) do yield it }
+             member x.Bids = seq<Order> { for it in bids.OrderBy(fun x -> x.Price) -> it }
              member x.Pair = pair
              member x.Exchange = exchange
              member x.Time = time
