@@ -5,9 +5,9 @@
    <br>F# 4.5
    <br>MSTests
 
-   IBitFinexApi
-   BitFinexApi(key:string, secret:string, ?timeout:int)
-   Sample Using:
-	let api = BitFinexApi(apiKey,apiSecret, 5000) //5000 ms -> 5 seconds timeout for web request
-        let pairs = api.GetSupportedPairs()
-        let pairs = (api :> IBitFinexApi).GetSupportedPairs()
+   <br>IBitFinexApi
+   <br>BitFinexApi(key:string, secret:string, ?timeout:int)
+   <br>Sample Using:
+<br>&nbsp;&nbsp;&nbsp;let api = BitFinexApi(apiKey,apiSecret, 5000) //5000 ms -> 5 seconds timeout for web request
+<br>&nbsp;&nbsp;&nbsp;let pairs = api.GetSupportedPairs()
+<br>&nbsp;&nbsp;&nbsp;let pairs = (api :> IBitFinexApi).GetSupportedPairs()
