@@ -1,0 +1,6 @@
+C:\PROJECT\ExchangeApi\CryptCurrency.Common.DataContracts\CryptCurrency.Common.DataContracts\bin\Debug\netcoreapp2.1\CryptCurrency.Common.DataContracts.deps.json
+C:\PROJECT\ExchangeApi\CryptCurrency.Common.DataContracts\CryptCurrency.Common.DataContracts\bin\Debug\netcoreapp2.1\CryptCurrency.Common.DataContracts.dll
+C:\PROJECT\ExchangeApi\CryptCurrency.Common.DataContracts\CryptCurrency.Common.DataContracts\bin\Debug\netcoreapp2.1\CryptCurrency.Common.DataContracts.pdb
+C:\PROJECT\ExchangeApi\CryptCurrency.Common.DataContracts\CryptCurrency.Common.DataContracts\obj\Debug\netcoreapp2.1\CryptCurrency.Common.DataContracts.dll
+C:\PROJECT\ExchangeApi\CryptCurrency.Common.DataContracts\CryptCurrency.Common.DataContracts\obj\Debug\netcoreapp2.1\CryptCurrency.Common.DataContracts.pdb
+C:\PROJECT\ExchangeApi\CryptCurrency.Common.DataContracts\CryptCurrency.Common.DataContracts\obj\Debug\netcoreapp2.1\CryptCurrency.Common.DataContracts.fsprojAssemblyReference.cache

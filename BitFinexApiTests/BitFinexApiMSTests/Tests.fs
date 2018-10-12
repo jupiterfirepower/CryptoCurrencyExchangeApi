@@ -224,9 +224,27 @@ module MSTests =
             try
                 (api :> IBitFinexApi).GetTickers(PairClass("btc","mmm")) |> ignore
             with
-                | :? WebApiError as ex when ex.Message ="GetTicker not found" && ex.Code = 404 -> Assert.IsTrue(true);
+                | :? WebApiError as ex when ex.Code = 400 -> Assert.IsTrue(true);
                 | _ -> Assert.IsTrue(false);
 
+        [<TestMethod>]
+        member this.AsyncGetTickersNotFound () =
+            try
+                (api :> IBitFinexApi).AsyncGetTickers(PairClass("btc","mmm")) |> Async.RunSynchronously |> ignore
+            with
+                | :? WebApiError as ex when ex.Code = 400 -> Assert.IsTrue(true);
+                | _ -> Assert.IsTrue(false);
+
+        [<TestMethod>]
+        member this.GetTickersAsyncNotFound () =
+            try
+                let cts = new CancellationTokenSource()
+                (api :> IBitFinexApi).GetTickersAsync(PairClass("btc","mmm"), cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously |> ignore
+            with
+                | :? AggregateException as ae -> if ae.Message.Contains("Unknown Symbol from pair parameter") then
+                                                    Assert.IsTrue(true)
+                                                 else
+                                                    Assert.IsTrue(false)
         [<TestMethod>]
         member this.GetStats () =
             let stats = (api :> IBitFinexApi).GetStats(PairClass("btc","usd"))
@@ -278,6 +296,17 @@ module MSTests =
         [<TestMethod>]
         member this.GetStatsNotFound () =
             let stats = (api :> IBitFinexApi).GetStats(PairClass("btc","mmm"))
+            Assert.IsTrue(stats |> Seq.isEmpty);
+
+        [<TestMethod>]
+        member this.AsyncGetStatsNotFound () =
+            let stats = (api :> IBitFinexApi).AsyncGetStats(PairClass("btc","mmm")) |>  Async.RunSynchronously
+            Assert.IsTrue(stats |> Seq.isEmpty);
+
+        [<TestMethod>]
+        member this.GetStatsAsyncNotFound () =
+            let cts = new CancellationTokenSource()
+            let stats = (api :> IBitFinexApi).GetStatsAsync(PairClass("btc","mmm"), Some cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(stats |> Seq.isEmpty);
 
         [<TestMethod>]
@@ -403,6 +432,17 @@ module MSTests =
             Assert.IsTrue(trades |> Seq.isEmpty);
 
         [<TestMethod>]
+        member this.AsyncGetTradesNotFound () =
+            let trades = (api :> IBitFinexApi).AsyncGetTrades(PairClass("btc","mmm")) |>  Async.RunSynchronously
+            Assert.IsTrue(trades |> Seq.isEmpty);
+
+        [<TestMethod>]
+        member this.GetTradesAsyncNotFound () =
+            let cts = new CancellationTokenSource()
+            let trades = (api :> IBitFinexApi).GetTradesAsync(PairClass("btc","mmm"), cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
+            Assert.IsTrue(trades |> Seq.isEmpty);
+
+        [<TestMethod>]
         member this.GetLends () =
             let lands = (api :> IBitFinexApi).GetLends("btc")
             Assert.IsTrue(lands |> (not << Seq.isEmpty));
@@ -456,8 +496,14 @@ module MSTests =
             Assert.IsTrue(lands |> Seq.isEmpty);
 
         [<TestMethod>]
+        member this.AsyncGetLendsNotFound () =
+            let lands = (api :> IBitFinexApi).AsyncGetLends("mmm") |> Async.RunSynchronously
+            Assert.IsTrue(lands |> Seq.isEmpty);
+
+        [<TestMethod>]
         member this.GetLendsAsyncNotFound () =
-            let lands = (api :> IBitFinexApi).GetLendsAsync("mmm") |>  Async.AwaitTask |> Async.RunSynchronously
+            let cts = new CancellationTokenSource()
+            let lands = (api :> IBitFinexApi).GetLendsAsync("mmm", cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(lands |> Seq.isEmpty);
 
         [<TestMethod>]
