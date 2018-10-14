@@ -6,7 +6,6 @@ open System.Net
 open System.Collections.Generic
 open CryptCurrency.Common.DataContracts
 open FSharp.Data;
-//open MoreLinq;
 open FSharp.Data.HttpRequestHeaders
 open FSharp.Data.HttpMethod
 open System.Text
@@ -481,13 +480,6 @@ module WebApi =
                                                         | :? System.Net.Http.HttpRequestException as e -> return handleHttpRequestException(e)
                                                     }
 
-    let private retryHelper f defaultRetryParams = 
-                                let result = 
-                                          (retry {
-                                                   return f
-                                          }) defaultRetryParams 
-                                result
-
     type BitFinexApi(key:string, secret:string, ?timeout:int)=
          let apiKey = key
          let apiSecret = secret
@@ -499,67 +491,95 @@ module WebApi =
             if key.IsNullOrEmpty() then nullArg "key can't be null or empty."
             if secret.IsNullOrEmpty() then nullArg "secret can't be null or empty."
 
+         member x.RunWithRetries f (retries:RetryParams) =
+                let m = retries.maxRetries - 1
+                match m with
+                | 0 -> f()
+                | _ -> try
+                            f()
+                       with
+                       | _ -> x.RunWithRetries f ({ retries with maxRetries=retries.maxRetries-1 })
+
+         member x.AsyncRunWithRetries (f : unit -> Async<_>, retries:RetryParams) : _ =
+            let rec loop = function
+              | 0, Some(ex) -> printfn "nzero~%A" 0 
+                               raise ex
+              | n, _ -> 
+                        async { 
+                                  try
+                                    printfn "nasync~%A" n 
+                        
+                                    let! v = f()
+                                    return v
+                                  with ex ->return! loop (n-1, Some(ex))
+                             }
+            loop(retries.maxRetries, None)
+
          interface IBitFinexApi with
-            member x.GetSupportedPairs() = retryHelper (GetSupportedPairs webtimeout) defaultRetryParams
-            member x.AsyncGetSupportedPairs() = AsyncGetSupportedPairs webtimeout
+            member x.GetSupportedPairs() = x.RunWithRetries (fun()->(GetSupportedPairs webtimeout)) defaultRetryParams
+            member x.AsyncGetSupportedPairs() = x.AsyncRunWithRetries ((fun()->AsyncGetSupportedPairs webtimeout), defaultRetryParams)
             /// Expose C#-friendly asynchronous method that returns Task
-            member x.GetSupportedPairsAsync() = Async.StartAsTask((AsyncGetSupportedPairs webtimeout)) 
+            member x.GetSupportedPairsAsync() = Async.StartAsTask(x.AsyncRunWithRetries ((fun()->AsyncGetSupportedPairs webtimeout), defaultRetryParams)) 
             /// Expose C#-friendly asynchronous method that returns Task
             /// and takes cancellation token to support cancellation...
-            member x.GetSupportedPairsAsync(token:CancellationToken) = Async.StartAsTask(GetSupportedPairsAsync(token, webtimeout))
+            member x.GetSupportedPairsAsync(token:CancellationToken) = Async.StartAsTask(x.AsyncRunWithRetries ((fun()->GetSupportedPairsAsync(token, webtimeout)), defaultRetryParams))
             member x.GetSupportedPairsAsync(?token:CancellationToken) = let deftoken = defaultArg token Async.DefaultCancellationToken
-                                                                        Async.StartAsTask(GetSupportedPairsAsync(deftoken, webtimeout))
+                                                                        Async.StartAsTask(x.AsyncRunWithRetries ((fun()->GetSupportedPairsAsync(deftoken, webtimeout)), defaultRetryParams))
                                                                         
 
-            member x.GetPairDetails() = retryHelper (GetPairDetails webtimeout) defaultRetryParams
-            member x.AsyncGetPairDetails() = AsyncGetPairDetails webtimeout
-            member x.GetPairDetailsAsync() = Async.StartAsTask(AsyncGetPairDetails(webtimeout))
-            member x.GetPairDetailsAsync(token:CancellationToken) =  Async.StartAsTask(GetPairDetailsAsync(token, webtimeout))
+            member x.GetPairDetails() = x.RunWithRetries (fun()->(GetPairDetails webtimeout)) defaultRetryParams
+            member x.AsyncGetPairDetails() = x.AsyncRunWithRetries ((fun()->AsyncGetPairDetails webtimeout), defaultRetryParams)
+            member x.GetPairDetailsAsync() = Async.StartAsTask(x.AsyncRunWithRetries ((fun()->AsyncGetPairDetails(webtimeout)), defaultRetryParams))
+            member x.GetPairDetailsAsync(token:CancellationToken) = Async.StartAsTask(x.AsyncRunWithRetries ((fun()->GetPairDetailsAsync(token, webtimeout)), defaultRetryParams))
             member x.GetPairDetailsAsync(?token:CancellationToken) = let deftoken = defaultArg token Async.DefaultCancellationToken
-                                                                     Async.StartAsTask(GetPairDetailsAsync(deftoken, webtimeout))
+                                                                     Async.StartAsTask(x.AsyncRunWithRetries ((fun()->GetPairDetailsAsync(deftoken, webtimeout)), defaultRetryParams))
 
             
-            member x.GetTickers(pair:PairClass) = retryHelper (GetTicker pair webtimeout) defaultRetryParams
-            member x.AsyncGetTickers(pair:PairClass) = AsyncGetTicker pair webtimeout
-            member x.GetTickersAsync(pair:PairClass) = Async.StartAsTask(AsyncGetTicker pair webtimeout)
-            member x.GetTickersAsync(pair:PairClass, token:CancellationToken) = Async.StartAsTask(GetTickerAsync(pair, token, webtimeout))
+            member x.GetTickers(pair:PairClass) = x.RunWithRetries (fun()->(GetTicker pair webtimeout)) defaultRetryParams
+            member x.AsyncGetTickers(pair:PairClass) = x.AsyncRunWithRetries ((fun()->AsyncGetTicker pair webtimeout), defaultRetryParams)
+            member x.GetTickersAsync(pair:PairClass) = Async.StartAsTask( x.AsyncRunWithRetries ((fun()->AsyncGetTicker pair webtimeout), defaultRetryParams))
+            member x.GetTickersAsync(pair:PairClass, token:CancellationToken) = Async.StartAsTask(x.AsyncRunWithRetries ((fun()->GetTickerAsync(pair, token, webtimeout)), defaultRetryParams))
             member x.GetTickersAsync(pair:PairClass, ?token:CancellationToken) = let deftoken = defaultArg token Async.DefaultCancellationToken
-                                                                                 Async.StartAsTask(GetTickerAsync(pair, deftoken, webtimeout))
+                                                                                 Async.StartAsTask(x.AsyncRunWithRetries ((fun()->GetTickerAsync(pair, deftoken, webtimeout)), defaultRetryParams))
 
-            member x.GetStats(pair:PairClass) = retryHelper (GetStats pair webtimeout) defaultRetryParams
-            member x.AsyncGetStats(pair:PairClass) = AsyncGetStats pair webtimeout
-            member x.GetStatsAsync(pair:PairClass) = Async.StartAsTask(AsyncGetStats pair webtimeout)
-            member x.GetStatsAsync(pair:PairClass, token:CancellationToken) = Async.StartAsTask(GetStatsAsync(pair, token, webtimeout))
+            member x.GetStats(pair:PairClass) = x.RunWithRetries (fun()-> (GetStats pair webtimeout)) defaultRetryParams
+            member x.AsyncGetStats(pair:PairClass) = x.AsyncRunWithRetries ((fun()->AsyncGetStats pair webtimeout), defaultRetryParams)
+            member x.GetStatsAsync(pair:PairClass) = Async.StartAsTask(x.AsyncRunWithRetries ((fun()->AsyncGetStats pair webtimeout), defaultRetryParams))
+            member x.GetStatsAsync(pair:PairClass, token:CancellationToken) = Async.StartAsTask(x.AsyncRunWithRetries ((fun()->GetStatsAsync(pair, token, webtimeout)), defaultRetryParams))
             member x.GetStatsAsync(pair:PairClass, ?token:CancellationToken) = let deftoken = defaultArg token Async.DefaultCancellationToken
-                                                                               Async.StartAsTask(GetStatsAsync(pair, deftoken, webtimeout))
+                                                                               Async.StartAsTask(x.AsyncRunWithRetries ((fun()->GetStatsAsync(pair, deftoken, webtimeout)), defaultRetryParams))
 
-            member x.GetOrderBook(pair:PairClass) = retryHelper (getOrderBook pair webtimeout) defaultRetryParams
-            member x.AsyncGetOrderBook(pair:PairClass) = AsyncGetOrderBook pair webtimeout
-            member x.GetOrderBookAsync(pair:PairClass) = Async.StartAsTask(AsyncGetOrderBook pair webtimeout)
-            member x.GetOrderBookAsync(pair:PairClass, token:CancellationToken) = Async.StartAsTask(GetOrderBookAsync(pair, token, webtimeout))
+            member x.GetOrderBook(pair:PairClass) = x.RunWithRetries (fun()->(getOrderBook pair webtimeout)) defaultRetryParams
+            member x.AsyncGetOrderBook(pair:PairClass) = x.AsyncRunWithRetries ((fun()->AsyncGetOrderBook pair webtimeout), defaultRetryParams)
+            member x.GetOrderBookAsync(pair:PairClass) = Async.StartAsTask(x.AsyncRunWithRetries ((fun()->AsyncGetOrderBook pair webtimeout), defaultRetryParams))
+            member x.GetOrderBookAsync(pair:PairClass, token:CancellationToken) = Async.StartAsTask(x.AsyncRunWithRetries ((fun()->GetOrderBookAsync(pair, token, webtimeout)), defaultRetryParams))
             member x.GetOrderBookAsync(pair:PairClass, ?token:CancellationToken) = let deftoken = defaultArg token Async.DefaultCancellationToken
-                                                                                   Async.StartAsTask(GetOrderBookAsync(pair, deftoken, webtimeout))
+                                                                                   Async.StartAsTask(x.AsyncRunWithRetries ((fun()->GetOrderBookAsync(pair, deftoken, webtimeout)), defaultRetryParams))
 
-            member x.GetTrades(pair:PairClass) = retryHelper (GetTrades pair webtimeout) defaultRetryParams
-            member x.AsyncGetTrades(pair:PairClass) = AsyncGetTrades pair webtimeout
-            member x.GetTradesAsync(pair:PairClass) = Async.StartAsTask(AsyncGetTrades pair webtimeout)
-            member x.GetTradesAsync(pair:PairClass, token:CancellationToken) = Async.StartAsTask(GetTradesAsync(pair, token, webtimeout))
+            member x.GetTrades(pair:PairClass) = x.RunWithRetries (fun()->(GetTrades pair webtimeout)) defaultRetryParams
+            member x.AsyncGetTrades(pair:PairClass) = x.AsyncRunWithRetries ((fun()->AsyncGetTrades pair webtimeout), defaultRetryParams)
+            member x.GetTradesAsync(pair:PairClass) = Async.StartAsTask(x.AsyncRunWithRetries ((fun()->AsyncGetTrades pair webtimeout), defaultRetryParams))
+            member x.GetTradesAsync(pair:PairClass, token:CancellationToken) = Async.StartAsTask(x.AsyncRunWithRetries ((fun()->GetTradesAsync(pair, token, webtimeout)), defaultRetryParams))
             member x.GetTradesAsync(pair:PairClass, ?token:CancellationToken) = let deftoken = defaultArg token Async.DefaultCancellationToken
-                                                                                Async.StartAsTask(GetTradesAsync(pair, deftoken, webtimeout))
+                                                                                Async.StartAsTask(x.AsyncRunWithRetries ((fun()->GetTradesAsync(pair, deftoken, webtimeout)), defaultRetryParams))
 
-            member x.GetLends(currency:string) = retryHelper (getLends(currency,webtimeout)) defaultRetryParams
-            member x.AsyncGetLends(currency:string) = AsyncGetLends currency webtimeout
-            member x.GetLendsAsync(currency:string) = Async.StartAsTask(AsyncGetLends currency webtimeout)
-            member x.GetLendsAsync(currency:string, token:CancellationToken) = Async.StartAsTask(GetLendsAsync(currency, token, webtimeout))
+            member x.GetLends(currency:string) = if isNull currency then nullArg "currency" else x.RunWithRetries (fun()->getLends(currency,webtimeout)) defaultRetryParams
+            member x.AsyncGetLends(currency:string) = if isNull currency then nullArg "currency" else x.AsyncRunWithRetries ((fun()->AsyncGetLends currency webtimeout),  defaultRetryParams) 
+            member x.GetLendsAsync(currency:string) = if isNull currency then nullArg "currency" else Async.StartAsTask(x.AsyncRunWithRetries ((fun()->AsyncGetLends currency webtimeout),  defaultRetryParams))
+            member x.GetLendsAsync(currency:string, token:CancellationToken)  = if isNull currency then nullArg "currency" else Async.StartAsTask( x.AsyncRunWithRetries ((fun()->GetLendsAsync(currency, token, webtimeout)),  defaultRetryParams))
             member x.GetLendsAsync(currency:string, ?token:CancellationToken) = let deftoken = defaultArg token Async.DefaultCancellationToken
-                                                                                Async.StartAsTask(GetLendsAsync(currency, deftoken, webtimeout))
+                                                                                match currency with
+                                                                                | null -> nullArg "currency" 
+                                                                                | _ -> Async.StartAsTask(x.AsyncRunWithRetries ((fun()->GetLendsAsync(currency, deftoken, webtimeout)),  defaultRetryParams))
 
-            member x.GetLendBook(currency:string) = retryHelper (getLendBook(currency,webtimeout)) defaultRetryParams
-            member x.AsyncGetLendBook(currency:string) = AsyncGetLendBook(currency, webtimeout)
-            member x.GetLendBookAsync(currency:string) = Async.StartAsTask(AsyncGetLendBook(currency, webtimeout))
-            member x.GetLendBookAsync(currency:string, token:CancellationToken) = Async.StartAsTask(GetLendBookAsync(currency, token, webtimeout))
+            member x.GetLendBook(currency:string) = if isNull currency then nullArg "currency" else x.RunWithRetries (fun()->getLendBook(currency,webtimeout)) defaultRetryParams
+            member x.AsyncGetLendBook(currency:string) = if isNull currency then nullArg "currency" else x.AsyncRunWithRetries ((fun()->AsyncGetLendBook(currency, webtimeout)),  defaultRetryParams)
+            member x.GetLendBookAsync(currency:string) = if isNull currency then nullArg "currency" else Async.StartAsTask(x.AsyncRunWithRetries ((fun()->AsyncGetLendBook(currency, webtimeout)),  defaultRetryParams))
+            member x.GetLendBookAsync(currency:string, token:CancellationToken) = if isNull currency then nullArg "currency" else Async.StartAsTask(x.AsyncRunWithRetries ((fun()->GetLendBookAsync(currency, token, webtimeout)),  defaultRetryParams))
             member x.GetLendBookAsync(currency:string, ?token:CancellationToken) = let deftoken = defaultArg token Async.DefaultCancellationToken
-                                                                                   Async.StartAsTask(GetLendBookAsync(currency, deftoken, webtimeout))
+                                                                                   match currency with
+                                                                                   | null -> nullArg "currency" 
+                                                                                   | _ -> Async.StartAsTask(x.AsyncRunWithRetries ((fun()->GetLendBookAsync(currency, deftoken, webtimeout)),  defaultRetryParams))
 
          member x.GetSupportedPairs() = (x :> IBitFinexApi).GetSupportedPairs()
          member x.AsyncGetSupportedPairs() = (x :> IBitFinexApi).AsyncGetSupportedPairs()

@@ -26,7 +26,7 @@ module Retry =
         maxRetries : int; waitBetweenRetries : int
         }
 
-    let defaultRetryParams = {maxRetries = 3; waitBetweenRetries = 1000}
+    let defaultRetryParams = { maxRetries = 3; waitBetweenRetries = 0 }
 
     type RetryMonad<'a> = RetryParams -> 'a
     let rm<'a> (f : RetryParams -> 'a) : RetryMonad<'a> = f
@@ -44,7 +44,6 @@ module Retry =
             execWithRetry f 0 (Exception())
             ) 
 
-    
     type RetryBuilder() =
         
         member this.Bind (p : RetryMonad<'a>, f : 'a -> RetryMonad<'b>)  =

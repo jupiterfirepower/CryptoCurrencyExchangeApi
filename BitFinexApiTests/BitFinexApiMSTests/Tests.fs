@@ -496,6 +496,26 @@ module MSTests =
             Assert.IsTrue(lands |> Seq.isEmpty);
 
         [<TestMethod>]
+        member this.AsyncGetLendsTimeout () =
+            try
+                let api = BitFinexApi(apiKey,apiSecret, 1)
+                let lands = (api :> IBitFinexApi).AsyncGetLends("btc") |> Async.RunSynchronously
+                Assert.IsTrue(false);
+            with
+            | :? System.Net.WebException as we when (we.InnerException :? TimeoutException) -> Assert.IsTrue(true);
+            | _ -> Assert.IsFalse(true);
+
+        [<TestMethod>]
+        member this.GetLendsTimeout () =
+            try
+                let api = BitFinexApi(apiKey,apiSecret, 1)
+                let lands = (api :> IBitFinexApi).GetLends("btc")
+                Assert.IsTrue(false);
+            with
+            | :? System.Net.WebException as we when (we.InnerException :? TimeoutException) -> Assert.IsTrue(true);
+            | _ -> Assert.IsFalse(true);
+
+        [<TestMethod>]
         member this.AsyncGetLendsNotFound () =
             let lands = (api :> IBitFinexApi).AsyncGetLends("mmm") |> Async.RunSynchronously
             Assert.IsTrue(lands |> Seq.isEmpty);
