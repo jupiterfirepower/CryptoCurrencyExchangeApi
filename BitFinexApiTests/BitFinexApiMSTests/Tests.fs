@@ -1,7 +1,6 @@
 ﻿namespace BitFinexApiMSTests
 
 open System
-open System.Diagnostics
 open System.Threading
 open System.Threading.Tasks
 open Microsoft.VisualStudio.TestTools.UnitTesting
@@ -25,7 +24,7 @@ module MSTests =
         [<TestMethod>]
         member this.WebApiKeyArgumentNullException () =
             try
-                let api = BitFinexApi(null,apiSecret, 8000)
+                let apit = BitFinexApi(null,apiSecret, 8000)
                 Assert.IsTrue(false)
             with | :? ArgumentNullException -> Assert.IsTrue(true)
                  | _ -> Assert.IsTrue(false)
@@ -33,7 +32,7 @@ module MSTests =
         [<TestMethod>]
         member this.WebApiSecretArgumentNullException () =
             try
-                let api = BitFinexApi(apiKey,null, 8000)
+                let apit = BitFinexApi(apiKey,null, 8000)
                 Assert.IsTrue(false)
             with | :? ArgumentNullException -> Assert.IsTrue(true)
                  | _ -> Assert.IsTrue(false)
@@ -41,7 +40,7 @@ module MSTests =
         [<TestMethod>]
         member this.WebApiTimeoutArgumentException () =
             try
-                let api = BitFinexApi(apiKey,apiSecret, -1)
+                let apit = BitFinexApi(apiKey,apiSecret, -1)
                 Assert.IsTrue(false)
             with | :? ArgumentException -> Assert.IsTrue(true)
                  | _ -> Assert.IsTrue(false)
@@ -131,6 +130,7 @@ module MSTests =
 
         [<TestMethod>]
         member this.GetPairDetailsAsyncCancellationTokenNone () =
+            let api = BitFinexApi(apiKey,apiSecret, 10000)
             let pairDetails = (api :> IBitFinexApi).GetPairDetailsAsync(CancellationToken.None) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(pairDetails |> (not << Seq.isEmpty));
 
@@ -191,9 +191,8 @@ module MSTests =
                 task |> Async.RunSynchronously |> ignore
                 Assert.IsTrue(false)
             with
-                | :? WebApiError as ex when ex.Code = 300 -> Assert.IsTrue(true);
-                | :? AggregateException as agx -> Assert.IsTrue(true)
-                | _ -> Assert.IsTrue(false)
+            | :? AggregateException as agx when (agx.InnerException :? TaskCanceledException) && agx.InnerException.Message.Contains("A task was canceled")  -> Assert.IsTrue(true)
+            | _ -> Assert.IsTrue(false)
 
         [<TestMethod>]
         member this.GetTickersAsyncCancellationTokenOption () =
@@ -210,8 +209,7 @@ module MSTests =
                 task |> Async.RunSynchronously |> ignore
                 Assert.IsTrue(false)
             with
-                | :? WebApiError as ex when ex.Code = 300 -> Assert.IsTrue(true)
-                | :? AggregateException as agx -> Assert.IsTrue(true)
+                | :? AggregateException as agx when (agx.InnerException :? TaskCanceledException) && agx.InnerException.Message.Contains("A task was canceled") -> Assert.IsTrue(true)
                 | _ -> Assert.IsTrue(false)
 
         [<TestMethod>]
@@ -262,6 +260,7 @@ module MSTests =
 
         [<TestMethod>]
         member this.GetStatsAsyncCancellationToken () =
+            let api = BitFinexApi(apiKey,apiSecret, 10000)
             let cts = new CancellationTokenSource()
             let stats = (api :> IBitFinexApi).GetStatsAsync(PairClass("btc","usd"), cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(stats |> (not << Seq.isEmpty));
@@ -318,20 +317,17 @@ module MSTests =
         member this.AsyncGetOrderBook () =
             let orderBook = (api :> IBitFinexApi).AsyncGetOrderBook(PairClass("btc","usd")) |>  Async.RunSynchronously
             Assert.IsTrue(orderBook.Exchange <> null);
-            //Assert.IsTrue(orderBook.Asks |> (not << Seq.empty));
         
         [<TestMethod>]
         member this.GetOrderBookAsync () =
             let orderBook = (api :> IBitFinexApi).GetOrderBookAsync(PairClass("btc","usd")) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(orderBook.Exchange <> null);
-            //Assert.IsTrue(orderBook.Asks |> (not << Seq.empty));
 
         [<TestMethod>]
         member this.GetOrderBookAsyncCancellationToken () =
             let cts = new CancellationTokenSource()
             let orderBook = (api :> IBitFinexApi).GetOrderBookAsync(PairClass("btc","usd"), cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(orderBook.Exchange <> null);
-            //Assert.IsTrue(orderBook.Asks |> (not << Seq.empty));
 
         [<TestMethod>]
         member this.GetOrderBookAsyncCancellationTokenCancel () =
@@ -341,8 +337,7 @@ module MSTests =
                 cts.Cancel() 
                 task |> Async.RunSynchronously |> ignore
             with
-                | :? AggregateException as ex -> Assert.IsTrue(true);
-                | :? TaskCanceledException as ex -> Assert.IsTrue(true);
+                | :? AggregateException as agx when (agx.InnerException :? TaskCanceledException) && agx.InnerException.Message.Contains("A task was canceled")  -> Assert.IsTrue(true);
                 | _ -> Assert.IsTrue(false);
 
         [<TestMethod>]
@@ -350,7 +345,6 @@ module MSTests =
             let cts = new CancellationTokenSource()
             let orderBook = (api :> IBitFinexApi).GetOrderBookAsync(PairClass("btc","usd"), Some cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(orderBook.Exchange <> null);
-            //Assert.IsTrue(orderBook.Asks |> (not << Seq.empty));
 
         [<TestMethod>]
         member this.GetOrderBookAsyncCancellationTokenOptionCancel () =
@@ -360,15 +354,13 @@ module MSTests =
                 cts.Cancel() 
                 task |> Async.RunSynchronously |> ignore
             with
-                | :? AggregateException as ex -> Assert.IsTrue(true);
-                | :? TaskCanceledException as ex -> Assert.IsTrue(true);
+                | :? AggregateException as agx when (agx.InnerException :? TaskCanceledException) && agx.InnerException.Message.Contains("A task was canceled") -> Assert.IsTrue(true);
                 | _ -> Assert.IsTrue(false);
 
         [<TestMethod>]
         member this.GetOrderBookAsyncCancellationTokenOptionNone () =
             let orderBook = (api :> IBitFinexApi).GetOrderBookAsync(PairClass("btc","usd"), None) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(orderBook.Exchange <> null);
-            //Assert.IsTrue(orderBook.Asks |> (not << Seq.empty));
 
         [<TestMethod>]
         member this.GetOrderBookNotFound () =
@@ -498,8 +490,8 @@ module MSTests =
         [<TestMethod>]
         member this.AsyncGetLendsTimeout () =
             try
-                let api = BitFinexApi(apiKey,apiSecret, 1)
-                let lands = (api :> IBitFinexApi).AsyncGetLends("btc") |> Async.RunSynchronously
+                let apil = BitFinexApi(apiKey,apiSecret, 1)
+                (apil :> IBitFinexApi).AsyncGetLends("btc") |> Async.RunSynchronously |> ignore
                 Assert.IsTrue(false);
             with
             | :? System.Net.WebException as we when (we.InnerException :? TimeoutException) -> Assert.IsTrue(true);
@@ -508,8 +500,8 @@ module MSTests =
         [<TestMethod>]
         member this.GetLendsTimeout () =
             try
-                let api = BitFinexApi(apiKey,apiSecret, 1)
-                let lands = (api :> IBitFinexApi).GetLends("btc")
+                let apil = BitFinexApi(apiKey,apiSecret, 1)
+                (apil :> IBitFinexApi).GetLends("btc") |> ignore
                 Assert.IsTrue(false);
             with
             | :? System.Net.WebException as we when (we.InnerException :? TimeoutException) -> Assert.IsTrue(true);
@@ -555,8 +547,7 @@ module MSTests =
                 cts.Cancel() 
                 task |> Async.RunSynchronously |> ignore
             with
-                | :? AggregateException as ex -> Assert.IsTrue(true);
-                | :? TaskCanceledException as ex -> Assert.IsTrue(true);
+                | :? AggregateException as agx when (agx.InnerException :? TaskCanceledException) && agx.InnerException.Message.Contains("A task was canceled") -> Assert.IsTrue(true);
                 | _ -> Assert.IsTrue(false);
 
         [<TestMethod>]
@@ -575,8 +566,7 @@ module MSTests =
                 cts.Cancel() 
                 task |> Async.RunSynchronously |> ignore
             with
-                | :? AggregateException as ex -> Assert.IsTrue(true);
-                | :? TaskCanceledException as ex -> Assert.IsTrue(true);
+                | :? AggregateException as agx when (agx.InnerException :? TaskCanceledException) && agx.InnerException.Message.Contains("A task was canceled") -> Assert.IsTrue(true);
                 | _ -> Assert.IsTrue(false);
 
         [<TestMethod>]

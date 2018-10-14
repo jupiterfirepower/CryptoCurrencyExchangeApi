@@ -317,7 +317,7 @@ module WebApi =
                                                                             return handleRaiseHttpRequestException(e, WebApiError(400, "Unknown Symbol from pair parameter", e))
                                                         }
 
-    let inline private getLendBookFrom(currency:string, landBook:BitFinexLendBook.Root) =  { 
+    let inline private getLendBookFrom(currency:string, landBook:BitFinexLendBook.Root) = { 
                                                                                              Currency = currency;
                                                                                              Asks = landBook.Asks |> Seq.map (fun x -> { Rate = x.Rate; Amount = x.Amount; 
                                                                                                                                   Period = x.Period; Timestamp = x.Timestamp; Frr = x.Frr }); 
@@ -384,7 +384,6 @@ module WebApi =
                                                                 let tiker = BitFinexPubTicker.Parse(tikerJson)
                                                                 return getTickerFrom(tiker) 
                                                             with 
-                                                                | :? OperationCanceledException as ex -> return raise(WebApiError(300, "GetTickerAsync OperationCanceledException", ex))
                                                                 | :? System.Net.Http.HttpRequestException as e -> 
                                                                      return handleRaiseHttpRequestException(e, WebApiError(400, "Unknown Symbol from pair parameter", e))
 
@@ -502,17 +501,13 @@ module WebApi =
 
          member x.AsyncRunWithRetries (f : unit -> Async<_>, retries:RetryParams) : _ =
             let rec loop = function
-              | 0, Some(ex) -> printfn "nzero~%A" 0 
-                               raise ex
+              | 0, Some(ex) -> raise ex
               | n, _ -> 
                         async { 
                                   try
-                                    printfn "nasync~%A" n 
-                        
-                                    let! v = f()
-                                    return v
+                                    return! f()
                                   with ex ->return! loop (n-1, Some(ex))
-                             }
+                              }
             loop(retries.maxRetries, None)
 
          interface IBitFinexApi with
