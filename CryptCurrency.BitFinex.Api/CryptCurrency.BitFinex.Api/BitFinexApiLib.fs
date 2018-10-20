@@ -181,7 +181,7 @@ module WebApi =
     let private baseUrl = "https://api.bitfinex.com/v1/"
     let private symbols = "symbols"
 
-    let AsyncWebRequestGetString (url:string, token:CancellationToken, webtimeout: int) = 
+    let private AsyncWebRequestGetString (url:string, token:CancellationToken, webtimeout: int) = 
                                     async {
                                             let handler = new HttpClientHandler()
                                             handler.AutomaticDecompression <- DecompressionMethods.Deflate ||| DecompressionMethods.GZip
@@ -501,10 +501,17 @@ module WebApi =
 
          member x.AsyncRunWithRetries (f : unit -> Async<_>, retries:RetryParams) : _ =
             let rec loop = function
-              | 0, Some(ex) -> raise ex
+              | 0, Some(ex) -> 
+                               #if DEBUG
+                               printfn "async loop Zero(0) raise"
+                               #endif
+                               raise ex
               | n, _ -> 
                         async { 
                                   try
+                                    #if DEBUG
+                                    printfn "async loop %i" n
+                                    #endif
                                     return! f()
                                   with ex ->return! loop (n-1, Some(ex))
                               }
