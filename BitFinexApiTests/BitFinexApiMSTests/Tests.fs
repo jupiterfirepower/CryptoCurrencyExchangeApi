@@ -1,6 +1,7 @@
 ﻿namespace BitFinexApiMSTests
 
 open System
+open System.Linq
 open System.Threading
 open System.Threading.Tasks
 open Microsoft.VisualStudio.TestTools.UnitTesting
@@ -43,6 +44,16 @@ module MSTests =
                 let apit = BitFinexApi(apiKey,apiSecret, -1)
                 Assert.IsTrue(false)
             with | :? ArgumentException -> Assert.IsTrue(true)
+                 | _ -> Assert.IsTrue(false)
+
+        [<TestMethod>]
+        member this.WebApiTimeoutAllArgumentException () =
+            try
+                let apit = BitFinexApi(null,null, -1)
+                Assert.IsTrue(false)
+            with 
+                 | :? ArgumentNullException -> Assert.IsTrue(true)
+                 | :? ArgumentException -> Assert.IsTrue(true)
                  | _ -> Assert.IsTrue(false)
 
         [<TestMethod>]
@@ -239,10 +250,9 @@ module MSTests =
                 let cts = new CancellationTokenSource()
                 (api :> IBitFinexApi).GetTickersAsync(PairClass("btc","mmm"), cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously |> ignore
             with
-                | :? AggregateException as ae -> if ae.Message.Contains("Unknown Symbol from pair parameter") then
-                                                    Assert.IsTrue(true)
-                                                 else
-                                                    Assert.IsTrue(false)
+                | :? AggregateException as ae when (ae.InnerException :? WebApiError) && ae.Message.Contains("Unknown Symbol from pair parameter") -> Assert.IsTrue(true)
+                | _ -> Assert.IsTrue(false);
+
         [<TestMethod>]
         member this.GetStats () =
             let stats = (api :> IBitFinexApi).GetStats(PairClass("btc","usd"))
@@ -579,4 +589,26 @@ module MSTests =
             try
                 let lendBook = (api :> IBitFinexApi).GetLendBook("mmm")
                 Assert.IsFalse(lendBook.Currency <> null);
-            with _ -> Assert.IsTrue(true);
+            with 
+                | :? WebApiError as ex when ex.Code = 400 -> Assert.IsTrue(true);
+                | _ -> Assert.IsTrue(false);
+
+        [<TestMethod>]
+        member this.AsyncGetLendBookNotFound () =
+            try
+                let lendBook = (api :> IBitFinexApi).AsyncGetLendBook("mmm") |> Async.RunSynchronously
+                Assert.IsFalse(lendBook.Currency <> null);
+            with 
+                | :? WebApiError as ex when ex.Code = 400 -> Assert.IsTrue(true);
+                | _ -> Assert.IsTrue(false);
+
+        [<TestMethod>]
+        member this.GetLendBookAsyncNotFound () =
+            try
+                let lendBook = (api :> IBitFinexApi).GetLendBookAsync("mmm") |>  Async.AwaitTask |> Async.RunSynchronously
+                Assert.IsFalse(lendBook.Currency <> null);
+            with 
+               | :? AggregateException as agx when (agx.InnerException :? WebApiError) && (agx.InnerException :?> WebApiError).Code = 400 
+                                                   && (agx.InnerException :?> WebApiError).InnerException.
+                                                   Message.Contains("(400) Bad Request") -> Assert.IsTrue(true);
+               | _ -> Assert.IsTrue(false);

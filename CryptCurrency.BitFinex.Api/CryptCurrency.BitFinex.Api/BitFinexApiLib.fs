@@ -183,7 +183,7 @@ module WebApi =
 
     let private AsyncWebRequestGetString (url:string, token:CancellationToken, webtimeout: int) = 
                                     async {
-                                            let handler = new HttpClientHandler()
+                                            use handler = new HttpClientHandler()
                                             handler.AutomaticDecompression <- DecompressionMethods.Deflate ||| DecompressionMethods.GZip
                                             use httpClient = new System.Net.Http.HttpClient(handler)
                                             httpClient.Timeout <- new TimeSpan(0,0,0,0, webtimeout)
