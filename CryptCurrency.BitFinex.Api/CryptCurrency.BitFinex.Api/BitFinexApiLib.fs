@@ -14,14 +14,30 @@ open System.Security.Cryptography
 open System.Linq
 
 module Model =
-    type BitFinexResponse = { 
+    (*type BitFinexResponse = { 
                               [<JsonProperty(PropertyName = "result")>]
                               Result : string;
                               [<JsonProperty(PropertyName = "message")>]
                               Message : string;
                               [<JsonProperty(PropertyName = "order_id")>]
                               OrderId : string; } 
-                              member x.IsSuccess = String.IsNullOrEmpty(x.Message)
+                              member x.IsSuccess = String.IsNullOrEmpty(x.Message)*)
+
+    [<AllowNullLiteral>]
+    type BitFinexResponse() = 
+            let mutable result = ""
+            let mutable message = ""
+            let mutable orderId = ""
+            [<JsonProperty(PropertyName = "result")>]
+            member x.Result with get() = result
+                            and set(v) = result <- v
+            [<JsonProperty(PropertyName = "message")>]
+            member x.Message with get() = message
+                             and set(v) = message <- v
+            [<JsonProperty(PropertyName = "order_id")>]
+            member x.OrderId with get() = orderId
+                             and set(v) = orderId <- v
+            member x.IsSuccess = String.IsNullOrEmpty(x.Message)
 
     type BitFinexBidAsk = { Rate : decimal
                             Amount : decimal
@@ -68,6 +84,10 @@ module Utils =
                                           let bytes = Encoding.UTF8.GetBytes(json)
                                           Convert.ToBase64String(bytes)
 
+    let paramsDictToJsonToBase64(parameters:Dictionary<string, obj>) = let json = JsonConvert.SerializeObject(parameters, Formatting.None)
+                                                                       let bytes = Encoding.UTF8.GetBytes(json)
+                                                                       Convert.ToBase64String(bytes)
+
     let SignHMacSha384 (key:string, data:byte[]) : byte[] = let hashMaker = new HMACSHA384(Encoding.ASCII.GetBytes(key))
                                                             hashMaker.ComputeHash(data)
 
@@ -83,11 +103,11 @@ module Utils =
         req
 
     [<Literal>]
-    let private XBFXAPIKEY = "X-BFX-APIKEY"
+    let internal XBFXAPIKEY = "X-BFX-APIKEY"
     [<Literal>]
-    let private XBFXPAYLOAD = "X-BFX-PAYLOAD"
+    let internal XBFXPAYLOAD = "X-BFX-PAYLOAD"
     [<Literal>]
-    let private XBFXSIGNATURE = "X-BFX-SIGNATURE"
+    let internal XBFXSIGNATURE = "X-BFX-SIGNATURE"
 
     let privateQuery(key: string, secret : string, url: string, parameters) : string = 
         let result = Http.RequestString(url , headers = [ (XBFXAPIKEY, key); (XBFXPAYLOAD, paramsToJsonToBase64 parameters); 
@@ -193,6 +213,45 @@ module WebApi =
                                             return content
                                          }
 
+    let private AsyncPrivateQuery(url:string, parameters: seq<string * obj>, apiKey:string, apiSecret:string, webtimeout: int) =
+                                    async {
+                                            use handler = new HttpClientHandler()
+                                            handler.AutomaticDecompression <- DecompressionMethods.Deflate ||| DecompressionMethods.GZip
+
+                                            use httpClient = new System.Net.Http.HttpClient(handler)
+                                            httpClient.Timeout <- TimeSpan.FromMilliseconds(float webtimeout)
+
+                                            httpClient.DefaultRequestHeaders.Add(XBFXAPIKEY, apiKey)
+                                            httpClient.DefaultRequestHeaders.Add(XBFXPAYLOAD, paramsToJsonToBase64(parameters))
+                                            httpClient.DefaultRequestHeaders.Add(XBFXSIGNATURE, Sign((paramsToJsonToBase64(parameters)), apiSecret))
+
+                                            use queryString = new StringContent(JsonConvert.SerializeObject(parameters, Formatting.None))
+                                            use! response = httpClient.PostAsync(new Uri(url), queryString ) |> Async.AwaitTask
+                                            response.EnsureSuccessStatusCode() |> ignore
+                                            return! response.Content.ReadAsStringAsync() |> Async.AwaitTask
+                                        }
+
+    let private PrivateQuery<'T>(url:string, parameters: seq<string * obj>, 
+                                 apiKey:string, apiSecret:string, 
+                                 webtimeout: int): Async<'T> =
+                                 async{
+                                    try
+                                        let parameters' = seq { yield Seq.item 0 parameters; yield ("nonce", Convert.ToString(getNonce) :> obj);  for i in 1..(Seq.length parameters) do yield (Seq.item i parameters) }  //Seq.append parameters [("nonce", Convert.ToString(getNonce) :> obj)]
+                                        let! resultData = AsyncPrivateQuery(url, parameters', apiKey, apiSecret, webtimeout)
+                                        let mutable response:BitFinexResponse = null
+                                        try
+                                            response <- JsonConvert.DeserializeObject<BitFinexResponse>(resultData)
+                                        with 
+                                        |_ ->()
+                                        if response <> Unchecked.defaultof<_> && not response.IsSuccess then 
+                                            return raise(Exception(response.Message))
+                                        else
+                                            return JsonConvert.DeserializeObject<'T>(resultData)
+                                    with 
+                                        | _ as ex -> return reraise' ex
+                                 }
+                                    
+
     let private getWebResponseMessage(response:WebResponse) = use stream = response.GetResponseStream() 
                                                               use reader = new StreamReader(stream) 
                                                               let message = reader.ReadToEnd()
@@ -212,18 +271,18 @@ module WebApi =
     let inline private getSupportedPairsFrom(pairs:string[]) = pairs |> Seq.map (fun x -> let data = x.toArrayByChunkSize(3)
                                                                                           PairClass(Seq.item 0 data, Seq.item 1 data))
 
-    let GetSupportedPairs webtimeout = let pairs = BitFinexPair.Parse(Http.RequestString(baseUrl +^ symbols, httpMethod = Get, 
+    let private GetSupportedPairs webtimeout = let pairs = BitFinexPair.Parse(Http.RequestString(baseUrl +^ symbols, httpMethod = Get, 
                                                                                          headers = [ Accept HttpContentTypes.Json; ContentType HttpContentTypes.Json ], 
                                                                                          customizeHttpRequest = addDecompression, timeout = webtimeout))
-                                       getSupportedPairsFrom(pairs)
+                                               getSupportedPairsFrom(pairs)
 
-    let AsyncGetSupportedPairs webtimeout = async{  let! pairs =  Http.AsyncRequestString(baseUrl +^ symbols, httpMethod = Get, 
+    let private AsyncGetSupportedPairs webtimeout = async{  let! pairs =  Http.AsyncRequestString(baseUrl +^ symbols, httpMethod = Get, 
                                                                                           headers = [ Accept HttpContentTypes.Json; ContentType HttpContentTypes.Json ], 
                                                                                           customizeHttpRequest = addDecompression, timeout = webtimeout)
-                                                    let pairs = BitFinexPair.Parse(pairs)
-                                                    return getSupportedPairsFrom(pairs)  }
+                                                            let pairs = BitFinexPair.Parse(pairs)
+                                                            return getSupportedPairsFrom(pairs)  }
 
-    let GetSupportedPairsAsync(token:CancellationToken, webtimeout: int) = async{  
+    let private GetSupportedPairsAsync(token:CancellationToken, webtimeout: int) = async{  
                                                     try
                                                         let! pairs =  AsyncWebRequestGetString(baseUrl +^ symbols, token, webtimeout)
                                                         let pairs = BitFinexPair.Parse(pairs)
@@ -237,29 +296,25 @@ module WebApi =
                                                                                                                        MaximumOrderSize = x.MaximumOrderSize; 
                                                                                                                        Expiration = x.Expiration; Margin = x.Margin }); 
 
-    let GetPairDetails webtimeout = let pairDetails = BitFinexPairDetails.Parse(Http.RequestString(baseUrl +^ "symbols_details", httpMethod = Get, 
+    let private GetPairDetails webtimeout = let pairDetails = BitFinexPairDetails.Parse(Http.RequestString(baseUrl +^ "symbols_details", httpMethod = Get, 
                                                                                                    headers = [ Accept HttpContentTypes.Json; ContentType HttpContentTypes.Json ], 
                                                                                                    customizeHttpRequest = addDecompression, timeout = webtimeout))
-                                    getPairDetailsFrom(pairDetails)
+                                            getPairDetailsFrom(pairDetails)
 
-    let AsyncGetPairDetails webtimeout = async{  let! pairDetails =  Http.AsyncRequestString(baseUrl +^ "symbols_details", httpMethod = Get, 
+    let private AsyncGetPairDetails webtimeout = async{  let! pairDetails =  Http.AsyncRequestString(baseUrl +^ "symbols_details", httpMethod = Get, 
                                                                                              headers = [ Accept HttpContentTypes.Json; ContentType HttpContentTypes.Json ], 
                                                                                              customizeHttpRequest = addDecompression, timeout = webtimeout)
-                                                 let pairDetails = BitFinexPairDetails.Parse(pairDetails)
-                                                 return getPairDetailsFrom(pairDetails)  }
+                                                         let pairDetails = BitFinexPairDetails.Parse(pairDetails)
+                                                         return getPairDetailsFrom(pairDetails)  }
 
-    let GetPairDetailsAsync(token:CancellationToken, webtimeout: int) = async {  
-                                                        try
-                                                            let! pairDetailsJson =  AsyncWebRequestGetString(baseUrl +^ "symbols_details", token, webtimeout)
-                                                            let pairDetails = BitFinexPairDetails.Parse(pairDetailsJson)
-                                                            return getPairDetailsFrom(pairDetails)
-                                                        with 
-                                                            | :? OperationCanceledException -> return Seq.empty 
-                                                    }
-
-    //let GetActiveOrders = let methods = apiVersion ^ "orders"
-    //                      let data = BitFinexOrderStatus.Parse(PrivateQuery("","", baseUrl ^ methods, [ ("request", ("/" ^ methods) :> obj); ("nonce", (Convert.ToString(getNonce)) :> obj) ]))
-    //                      data
+    let private GetPairDetailsAsync(token:CancellationToken, webtimeout: int) = async {  
+                                                                try
+                                                                    let! pairDetailsJson =  AsyncWebRequestGetString(baseUrl +^ "symbols_details", token, webtimeout)
+                                                                    let pairDetails = BitFinexPairDetails.Parse(pairDetailsJson)
+                                                                    return getPairDetailsFrom(pairDetails)
+                                                                with 
+                                                                    | :? OperationCanceledException -> return Seq.empty 
+                                                            }
 
     type WebApiError(code : int, msg : string, innerException:Exception) =
         inherit Exception(msg, innerException)
@@ -287,15 +342,15 @@ module WebApi =
                                                                                              new OrderBook( bids, asks, BitFinex, pair, DateTime.UtcNow ) 
 
 
-    let getOrderBook (pair: PairClass) (webtimeout:int) = try
-                                                             let orderBook = BitFinexOrderBook.Parse(Http.RequestString(baseUrl +^ "book/" +^ pair.BaseCurrency +^ pair.CounterCurrency, 
-                                                                                                                        customizeHttpRequest = addDecompression, timeout = webtimeout))
-                                                             getOrderBookFrom(pair,orderBook)
-                                                          with
-                                                             | :? WebException as e when e.Status = WebExceptionStatus.ProtocolError -> 
-                                                                handleRaiseWebException(e, WebApiError(400, "Unknown Symbol from pair parameter", e))
+    let private getOrderBook (pair: PairClass) (webtimeout:int) = try
+                                                                     let orderBook = BitFinexOrderBook.Parse(Http.RequestString(baseUrl +^ "book/" +^ pair.BaseCurrency +^ pair.CounterCurrency, 
+                                                                                                                                customizeHttpRequest = addDecompression, timeout = webtimeout))
+                                                                     getOrderBookFrom(pair,orderBook)
+                                                                  with
+                                                                  | :? WebException as e when e.Status = WebExceptionStatus.ProtocolError -> 
+                                                                        handleRaiseWebException(e, WebApiError(400, "Unknown Symbol from pair parameter", e))
 
-    let AsyncGetOrderBook (pair: PairClass) (webtimeout:int) = async {  
+    let private AsyncGetOrderBook (pair: PairClass) (webtimeout:int) = async {  
                                                                         try
                                                                            let! orderBook =  Http.AsyncRequestString(baseUrl +^ "book/" +^ pair.BaseCurrency +^ pair.CounterCurrency, httpMethod = Get, 
                                                                                                                      headers = [ Accept HttpContentTypes.Json; ContentType HttpContentTypes.Json ], 
@@ -307,15 +362,16 @@ module WebApi =
                                                                                 return handleRaiseWebException(e, WebApiError(400, "Unknown Symbol from pair parameter", e))
                                                                      }
 
-    let GetOrderBookAsync(pair: PairClass, token:CancellationToken, webtimeout: int) = async{  
-                                                                try
-                                                                    let! orderBook =  AsyncWebRequestGetString(baseUrl +^ "book/" +^ pair.BaseCurrency +^ pair.CounterCurrency, token, webtimeout)
-                                                                    let orderBook = BitFinexOrderBook.Parse(orderBook)
-                                                                    return getOrderBookFrom(pair,orderBook)
-                                                                with 
-                                                                    | :? System.Net.Http.HttpRequestException as e -> 
-                                                                            return handleRaiseHttpRequestException(e, WebApiError(400, "Unknown Symbol from pair parameter", e))
-                                                        }
+    let private GetOrderBookAsync(pair: PairClass, token:CancellationToken, webtimeout: int) = 
+                                                            async{  
+                                                                    try
+                                                                        let! orderBook =  AsyncWebRequestGetString(baseUrl +^ "book/" +^ pair.BaseCurrency +^ pair.CounterCurrency, token, webtimeout)
+                                                                        let orderBook = BitFinexOrderBook.Parse(orderBook)
+                                                                        return getOrderBookFrom(pair,orderBook)
+                                                                    with 
+                                                                        | :? System.Net.Http.HttpRequestException as e -> 
+                                                                                return handleRaiseHttpRequestException(e, WebApiError(400, "Unknown Symbol from pair parameter", e))
+                                                            }
 
     let inline private getLendBookFrom(currency:string, landBook:BitFinexLendBook.Root) = { 
                                                                                              Currency = currency;
@@ -325,98 +381,102 @@ module WebApi =
                                                                                                                                   Period = x.Period; Timestamp = x.Timestamp; Frr = x.Frr }); 
                                                                                            } 
                                       
-    let getLendBook(currency,webtimeout) =  try
-                                                let lendBook = BitFinexLendBook.Parse(Http.RequestString(baseUrl +^ "lendbook/" +^ currency, customizeHttpRequest = addDecompression, timeout = webtimeout))
-                                                getLendBookFrom(currency,lendBook)
-                                            with
-                                               | :? WebException as e when e.Status = WebExceptionStatus.ProtocolError -> handleRaiseWebException(e, WebApiError(400, "Unknown Symbol from pair parameter", e))
+    let private getLendBook(currency,webtimeout) =  try
+                                                        let lendBook = BitFinexLendBook.Parse(Http.RequestString(baseUrl +^ "lendbook/" +^ currency, customizeHttpRequest = addDecompression, timeout = webtimeout))
+                                                        getLendBookFrom(currency,lendBook)
+                                                    with
+                                                        | :? WebException as e when e.Status = WebExceptionStatus.ProtocolError -> handleRaiseWebException(e, WebApiError(400, "Unknown Symbol from pair parameter", e))
 
-    let AsyncGetLendBook(currency,webtimeout) = async{ 
-                                                        try
-                                                            let! lendBook =  Http.AsyncRequestString(baseUrl +^ "lendbook/" +^ currency, httpMethod = Get, 
-                                                                                                     headers = [ Accept HttpContentTypes.Json; ContentType HttpContentTypes.Json ], 
-                                                                                                     customizeHttpRequest = addDecompression, timeout = webtimeout)
-                                                            let lendBook = BitFinexLendBook.Parse(lendBook)
-                                                            return getLendBookFrom(currency,lendBook)
-                                                        with
-                                                           | :? WebException as e when e.Status = WebExceptionStatus.ProtocolError -> 
-                                                                return handleRaiseWebException(e, WebApiError(400, "Unknown Symbol from pair parameter", e))
-                                                     }
+    let private AsyncGetLendBook(currency,webtimeout) = async{ 
+                                                                try
+                                                                    let! lendBook =  Http.AsyncRequestString(baseUrl +^ "lendbook/" +^ currency, httpMethod = Get, 
+                                                                                                             headers = [ Accept HttpContentTypes.Json; ContentType HttpContentTypes.Json ], 
+                                                                                                             customizeHttpRequest = addDecompression, timeout = webtimeout)
+                                                                    let lendBook = BitFinexLendBook.Parse(lendBook)
+                                                                    return getLendBookFrom(currency,lendBook)
+                                                                with
+                                                                   | :? WebException as e when e.Status = WebExceptionStatus.ProtocolError -> 
+                                                                        return handleRaiseWebException(e, WebApiError(400, "Unknown Symbol from pair parameter", e))
+                                                             }
 
-    let GetLendBookAsync(currency: string, token:CancellationToken, webtimeout: int) = async {  
-                                                            try
-                                                                let! lendBook =  AsyncWebRequestGetString(baseUrl +^ "lendbook/" +^ currency, token, webtimeout)
-                                                                let lendBook = BitFinexLendBook.Parse(lendBook)
-                                                                return  getLendBookFrom(currency,lendBook)
-                                                            with 
-                                                                | :? System.Net.Http.HttpRequestException as e -> 
-                                                                    return handleRaiseHttpRequestException(e, WebApiError(400, "Unknown Symbol from pair parameter", e))
-                                                        }
+    let private GetLendBookAsync(currency: string, token:CancellationToken, webtimeout: int) = 
+                                                         async {  
+                                                                    try
+                                                                        let! lendBook =  AsyncWebRequestGetString(baseUrl +^ "lendbook/" +^ currency, token, webtimeout)
+                                                                        let lendBook = BitFinexLendBook.Parse(lendBook)
+                                                                        return  getLendBookFrom(currency,lendBook)
+                                                                    with 
+                                                                        | :? System.Net.Http.HttpRequestException as e -> 
+                                                                            return handleRaiseHttpRequestException(e, WebApiError(400, "Unknown Symbol from pair parameter", e))
+                                                         }
    
     let inline private getTickerFrom(data:BitFinexPubTicker.Root) = { Mid = data.Mid; Bid = data.Bid; Ask = data.Ask; LastPrice = data.LastPrice; 
                                                                       Low = data.Low; High = data.High; Volume = data.Volume; Timestamp = data.Timestamp; } 
 
     
 
-    let GetTicker (pair: PairClass) (webtimeout:int) =  try
-                                                            let tiker = BitFinexPubTicker.Parse(Http.RequestString(baseUrl +^ "pubticker/" +^ pair.BaseCurrency +^ pair.CounterCurrency, 
-                                                                                                                   customizeHttpRequest = addDecompression, timeout = webtimeout))
-                                                            getTickerFrom(tiker)
-                                                        with
-                                                            | :? WebException as e when e.Status = WebExceptionStatus.ProtocolError -> 
-                                                                 handleRaiseWebException(e, WebApiError(400, "Unknown Symbol from pair parameter", e)) 
+    let private GetTicker (pair: PairClass) (webtimeout:int) =  try
+                                                                    let tiker = BitFinexPubTicker.Parse(Http.RequestString(baseUrl +^ "pubticker/" +^ pair.BaseCurrency +^ pair.CounterCurrency, 
+                                                                                                                           customizeHttpRequest = addDecompression, timeout = webtimeout))
+                                                                    getTickerFrom(tiker)
+                                                                with
+                                                                    | :? WebException as e when e.Status = WebExceptionStatus.ProtocolError -> 
+                                                                         handleRaiseWebException(e, WebApiError(400, "Unknown Symbol from pair parameter", e)) 
     
-    let AsyncGetTicker (pair: PairClass) (webtimeout:int) = async{  
-                                                                    try
-                                                                        let! tiker =  Http.AsyncRequestString(baseUrl +^ "pubticker/" +^ pair.BaseCurrency +^ pair.CounterCurrency, httpMethod = Get, 
-                                                                                                              headers = [ Accept HttpContentTypes.Json; ContentType HttpContentTypes.Json ], 
-                                                                                                              customizeHttpRequest = addDecompression, timeout = webtimeout)
-                                                                        let tiker = BitFinexPubTicker.Parse(tiker)
-                                                                        return getTickerFrom(tiker) 
-                                                                    with
-                                                                        | :? WebException as e when e.Status = WebExceptionStatus.ProtocolError -> 
-                                                                             return handleRaiseWebException(e, WebApiError(400, "Unknown Symbol from pair parameter", e)) 
-                                                                 }  
+    let private AsyncGetTicker (pair: PairClass) (webtimeout:int) = 
+                                                                async{  
+                                                                            try
+                                                                                let! tiker =  Http.AsyncRequestString(baseUrl +^ "pubticker/" +^ pair.BaseCurrency +^ pair.CounterCurrency, httpMethod = Get, 
+                                                                                                                      headers = [ Accept HttpContentTypes.Json; ContentType HttpContentTypes.Json ], 
+                                                                                                                      customizeHttpRequest = addDecompression, timeout = webtimeout)
+                                                                                let tiker = BitFinexPubTicker.Parse(tiker)
+                                                                                return getTickerFrom(tiker) 
+                                                                            with
+                                                                                | :? WebException as e when e.Status = WebExceptionStatus.ProtocolError -> 
+                                                                                     return handleRaiseWebException(e, WebApiError(400, "Unknown Symbol from pair parameter", e)) 
+                                                                }  
  
-    let GetTickerAsync(pair: PairClass, token:CancellationToken, webtimeout: int) = async {  
-                                                            try
-                                                                let! tikerJson =  AsyncWebRequestGetString(baseUrl +^ "pubticker/" +^ pair.BaseCurrency +^ pair.CounterCurrency, token, webtimeout)
-                                                                let tiker = BitFinexPubTicker.Parse(tikerJson)
-                                                                return getTickerFrom(tiker) 
-                                                            with 
-                                                                | :? System.Net.Http.HttpRequestException as e -> 
-                                                                     return handleRaiseHttpRequestException(e, WebApiError(400, "Unknown Symbol from pair parameter", e))
-
+    let private GetTickerAsync(pair: PairClass, token:CancellationToken, webtimeout: int) = 
+                                                    async {  
+                                                                try
+                                                                    let! tikerJson =  AsyncWebRequestGetString(baseUrl +^ "pubticker/" +^ pair.BaseCurrency +^ pair.CounterCurrency, token, webtimeout)
+                                                                    let tiker = BitFinexPubTicker.Parse(tikerJson)
+                                                                    return getTickerFrom(tiker) 
+                                                                with 
+                                                                    | :? System.Net.Http.HttpRequestException as e -> 
+                                                                         return handleRaiseHttpRequestException(e, WebApiError(400, "Unknown Symbol from pair parameter", e))
                                                     }
 
     let inline private getStatsFrom(data:BitFinexPubStats.Root[]) = data |> Seq.map (fun x -> { Period = x.Period; Volume = x.Volume })
 
-    let GetStats (pair:PairClass) (webtimeout:int) = try
-                                                        BitFinexPubStats.Parse(Http.RequestString(baseUrl +^ "stats/" +^ pair.BaseCurrency +^ pair.CounterCurrency, 
-                                                                                                  customizeHttpRequest = addDecompression, timeout = webtimeout)) 
-                                                        |> getStatsFrom
-                                                     with
-                                                        | :? WebException as e when e.Status = WebExceptionStatus.ProtocolError -> handleWebException(e)
+    let private GetStats (pair:PairClass) (webtimeout:int) = try
+                                                                BitFinexPubStats.Parse(Http.RequestString(baseUrl +^ "stats/" +^ pair.BaseCurrency +^ pair.CounterCurrency, 
+                                                                                                          customizeHttpRequest = addDecompression, timeout = webtimeout)) 
+                                                                |> getStatsFrom
+                                                             with
+                                                                | :? WebException as e when e.Status = WebExceptionStatus.ProtocolError -> handleWebException(e)
 
-    let AsyncGetStats (pair: PairClass) (webtimeout:int) = async{  
-                                                                    try
-                                                                        let! stats = Http.AsyncRequestString(baseUrl +^ "stats/" +^ pair.BaseCurrency +^ pair.CounterCurrency, httpMethod = Get, 
-                                                                                                             headers = [ Accept HttpContentTypes.Json; ContentType HttpContentTypes.Json ], 
-                                                                                                             customizeHttpRequest = addDecompression, timeout = webtimeout)
-                                                                        let stats = BitFinexPubStats.Parse(stats)
-                                                                        return getStatsFrom(stats)  
-                                                                    with
-                                                                      | :? WebException as e when e.Status = WebExceptionStatus.ProtocolError -> return handleWebException(e)    
-                                                                }
+    let private AsyncGetStats (pair: PairClass) (webtimeout:int) = 
+                                                            async{  
+                                                                        try
+                                                                            let! stats = Http.AsyncRequestString(baseUrl +^ "stats/" +^ pair.BaseCurrency +^ pair.CounterCurrency, httpMethod = Get, 
+                                                                                                                 headers = [ Accept HttpContentTypes.Json; ContentType HttpContentTypes.Json ], 
+                                                                                                                 customizeHttpRequest = addDecompression, timeout = webtimeout)
+                                                                            let stats = BitFinexPubStats.Parse(stats)
+                                                                            return getStatsFrom(stats)  
+                                                                        with
+                                                                            | :? WebException as e when e.Status = WebExceptionStatus.ProtocolError -> return handleWebException(e)    
+                                                            }
 
-    let GetStatsAsync(pair: PairClass, token:CancellationToken, webtimeout: int) = async{  
-                                                    try
-                                                        let! statsJson =  AsyncWebRequestGetString(baseUrl +^ "stats/" +^ pair.BaseCurrency +^ pair.CounterCurrency, token, webtimeout)
-                                                        let stats = BitFinexPubStats.Parse(statsJson)
-                                                        return getStatsFrom(stats)
-                                                    with 
-                                                        | :? OperationCanceledException -> return Seq.empty
-                                                        | :? System.Net.Http.HttpRequestException as e -> return handleHttpRequestException(e)
+    let private GetStatsAsync(pair: PairClass, token:CancellationToken, webtimeout: int) = 
+                                                    async{  
+                                                            try
+                                                                let! statsJson =  AsyncWebRequestGetString(baseUrl +^ "stats/" +^ pair.BaseCurrency +^ pair.CounterCurrency, token, webtimeout)
+                                                                let stats = BitFinexPubStats.Parse(statsJson)
+                                                                return getStatsFrom(stats)
+                                                            with 
+                                                                | :? OperationCanceledException -> return Seq.empty
+                                                                | :? System.Net.Http.HttpRequestException as e -> return handleHttpRequestException(e)
                                                     }
 
     let inline private getTradesFrom(data:BitFinexPubTrades.Root[]) = data |> Seq.map (fun x -> { Timestamp = x.Timestamp; Tid = x.Tid; Price = x.Price; 
@@ -429,55 +489,60 @@ module WebApi =
                                                               with
                                                                  | :? WebException as e when e.Status = WebExceptionStatus.ProtocolError -> handleWebException(e)
 
-    let AsyncGetTrades (pair: PairClass) (webtimeout:int) = async{
-                                                                   try
-                                                                        let! trades = Http.AsyncRequestString(baseUrl +^ "trades/" +^ pair.BaseCurrency +^ pair.CounterCurrency, httpMethod = Get, 
-                                                                                                              headers = [ Accept HttpContentTypes.Json; ContentType HttpContentTypes.Json ], 
-                                                                                                              customizeHttpRequest = addDecompression, timeout = webtimeout)
-                                                                        let trades = BitFinexPubTrades.Parse(trades)
-                                                                        return getTradesFrom(trades)  
-                                                                   with
-                                                                      | :? WebException as e when e.Status = WebExceptionStatus.ProtocolError -> return handleWebException(e)
-                                                                 }
+    let private AsyncGetTrades (pair: PairClass) (webtimeout:int) = 
+                                                                async{
+                                                                       try
+                                                                            let! trades = Http.AsyncRequestString(baseUrl +^ "trades/" +^ pair.BaseCurrency +^ pair.CounterCurrency, httpMethod = Get, 
+                                                                                                                  headers = [ Accept HttpContentTypes.Json; ContentType HttpContentTypes.Json ], 
+                                                                                                                  customizeHttpRequest = addDecompression, timeout = webtimeout)
+                                                                            let trades = BitFinexPubTrades.Parse(trades)
+                                                                            return getTradesFrom(trades)  
+                                                                       with
+                                                                          | :? WebException as e when e.Status = WebExceptionStatus.ProtocolError -> return handleWebException(e)
+                                                                }
     
 
-    let GetTradesAsync(pair: PairClass, token:CancellationToken, webtimeout: int) = async {  
-                                                        try
-                                                            let! trades =  AsyncWebRequestGetString(baseUrl +^ "trades/" +^ pair.BaseCurrency +^ pair.CounterCurrency, token, webtimeout)
-                                                            let trades = BitFinexPubTrades.Parse(trades)
-                                                            return getTradesFrom(trades)
-                                                        with 
-                                                            | :? OperationCanceledException -> return Seq.empty
-                                                            | :? System.Net.Http.HttpRequestException as e -> return handleHttpRequestException(e)
-                                                     }
+    let private GetTradesAsync(pair: PairClass, token:CancellationToken, webtimeout: int) = 
+                                                                async {  
+                                                                        try
+                                                                            let! trades =  AsyncWebRequestGetString(baseUrl +^ "trades/" +^ pair.BaseCurrency +^ pair.CounterCurrency, token, webtimeout)
+                                                                            let trades = BitFinexPubTrades.Parse(trades)
+                                                                            return getTradesFrom(trades)
+                                                                        with 
+                                                                            | :? OperationCanceledException -> return Seq.empty
+                                                                            | :? System.Net.Http.HttpRequestException as e -> return handleHttpRequestException(e)
+                                                                }
 
     let inline private getLendsFrom(data:BitFinexLends.Root[]) = data |> Seq.map (fun x -> { Rate = x.Rate; AmountLent = x.AmountLent; AmountUsed = x.AmountUsed; Timestamp = x.Timestamp })
 
-    let getLends(currency,webtimeout) = try
-                                            BitFinexLends.Parse(Http.RequestString(baseUrl +^ "lends/" +^ currency, customizeHttpRequest = addDecompression, timeout = webtimeout))
-                                            |> getLendsFrom
-                                        with
-                                            | :? WebException as e when e.Status = WebExceptionStatus.ProtocolError -> handleWebException(e)
+    let private getLends(currency,webtimeout) = try
+                                                    BitFinexLends.Parse(Http.RequestString(baseUrl +^ "lends/" +^ currency, customizeHttpRequest = addDecompression, timeout = webtimeout))
+                                                    |> getLendsFrom
+                                                with
+                                                    | :? WebException as e when e.Status = WebExceptionStatus.ProtocolError -> handleWebException(e)
 
-    let AsyncGetLends (currency: string) (webtimeout:int) = async{  try
+    let private AsyncGetLends (currency: string) (webtimeout:int) = 
+                                                            async{  
+                                                                    try
                                                                         let! lends = Http.AsyncRequestString(baseUrl +^ "lends/" +^ currency, httpMethod = Get, 
                                                                                                              headers = [ Accept HttpContentTypes.Json; ContentType HttpContentTypes.Json ], 
                                                                                                              customizeHttpRequest = addDecompression, timeout = webtimeout)
                                                                         let lends = BitFinexLends.Parse(lends)
                                                                         return getLendsFrom(lends)
-                                                                     with 
+                                                                    with 
                                                                         | :? WebException as e when e.Status = WebExceptionStatus.ProtocolError -> return handleWebException(e)
-                                                                  }
+                                                            }
 
-    let GetLendsAsync(currency: string, token:CancellationToken, webtimeout: int) = async{  
-                                                    try
-                                                        let! lends =  AsyncWebRequestGetString(baseUrl +^ "lends/" +^ currency, token, webtimeout)
-                                                        let lends = BitFinexLends.Parse(lends)
-                                                        return getLendsFrom(lends)
-                                                    with 
-                                                        | :? OperationCanceledException -> return Seq.empty 
-                                                        | :? System.Net.Http.HttpRequestException as e -> return handleHttpRequestException(e)
-                                                    }
+    let private GetLendsAsync(currency: string, token:CancellationToken, webtimeout: int) = 
+                                                        async{  
+                                                                try
+                                                                    let! lends =  AsyncWebRequestGetString(baseUrl +^ "lends/" +^ currency, token, webtimeout)
+                                                                    let lends = BitFinexLends.Parse(lends)
+                                                                    return getLendsFrom(lends)
+                                                                with 
+                                                                    | :? OperationCanceledException -> return Seq.empty 
+                                                                    | :? System.Net.Http.HttpRequestException as e -> return handleHttpRequestException(e)
+                                                        }
 
     type BitFinexApi(key:string, secret:string, ?timeout:int)=
          let apiKey = key
