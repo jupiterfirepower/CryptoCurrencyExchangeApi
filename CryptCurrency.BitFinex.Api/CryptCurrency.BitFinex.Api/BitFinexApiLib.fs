@@ -236,13 +236,18 @@ module WebApi =
                                  webtimeout: int): Async<'T> =
                                  async{
                                     try
-                                        let parameters' = seq { yield Seq.item 0 parameters; yield ("nonce", Convert.ToString(getNonce) :> obj);  for i in 1..(Seq.length parameters) do yield (Seq.item i parameters) }  //Seq.append parameters [("nonce", Convert.ToString(getNonce) :> obj)]
+                                        let parameters' = 
+                                            let m = (Seq.length parameters)
+                                            match m with
+                                            | 1 -> seq { yield Seq.item 0 parameters; yield ("nonce", Convert.ToString(getNonce) :> obj); } 
+                                            | n when n > 1 -> seq { yield Seq.item 0 parameters; yield ("nonce", Convert.ToString(getNonce) :> obj);  for i in 1..(Seq.length parameters) do yield (Seq.item i parameters) }
+                                            | _ -> raise(Exception("parameters can't be empty sequence"))
                                         let! resultData = AsyncPrivateQuery(url, parameters', apiKey, apiSecret, webtimeout)
                                         let mutable response:BitFinexResponse = null
                                         try
                                             response <- JsonConvert.DeserializeObject<BitFinexResponse>(resultData)
                                         with 
-                                        |_ ->()
+                                            |_ ->()
                                         if response <> Unchecked.defaultof<_> && not response.IsSuccess then 
                                             return raise(Exception(response.Message))
                                         else
@@ -252,10 +257,10 @@ module WebApi =
                                  }
                                     
 
-    let private getWebResponseMessage(response:WebResponse) = use stream = response.GetResponseStream() 
-                                                              use reader = new StreamReader(stream) 
-                                                              let message = reader.ReadToEnd()
-                                                              message
+    let inline private getWebResponseMessage(response:WebResponse) = use stream = response.GetResponseStream() 
+                                                                     use reader = new StreamReader(stream) 
+                                                                     let message = reader.ReadToEnd()
+                                                                     message
 
     let private handleHttpRequestException(e:System.Net.Http.HttpRequestException) = if e.Message.Contains("400 (Bad Request)") then 
                                                                                         Seq.empty 
