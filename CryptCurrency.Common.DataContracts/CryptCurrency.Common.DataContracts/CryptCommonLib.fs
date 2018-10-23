@@ -157,7 +157,7 @@ module DataContracts =
          //[<DefaultValue>]val mutable private xBaseCurrency: string
          //[<DefaultValue>]val mutable private xCounterCurrency: string
 
-         override x.ToString() = sprintf "%s/%s" bCurrency cCurrency
+         override x.ToString() = sprintf "%s%s" bCurrency cCurrency
          override x.GetHashCode() = hash (bCurrency, cCurrency)
          override x.Equals(b) =
                     match b with

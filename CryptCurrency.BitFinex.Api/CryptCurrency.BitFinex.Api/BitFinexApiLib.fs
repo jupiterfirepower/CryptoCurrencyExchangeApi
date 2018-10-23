@@ -14,15 +14,6 @@ open System.Security.Cryptography
 open System.Linq
 
 module Model =
-    (*type BitFinexResponse = { 
-                              [<JsonProperty(PropertyName = "result")>]
-                              Result : string;
-                              [<JsonProperty(PropertyName = "message")>]
-                              Message : string;
-                              [<JsonProperty(PropertyName = "order_id")>]
-                              OrderId : string; } 
-                              member x.IsSuccess = String.IsNullOrEmpty(x.Message)*)
-
     [<AllowNullLiteral>]
     type BitFinexResponse() = 
             let mutable result = ""
@@ -38,8 +29,6 @@ module Model =
             member x.OrderId with get() = orderId
                              and set(v) = orderId <- v
             member x.IsSuccess = String.IsNullOrEmpty(x.Message)
-
-
 
     type BitFinexBidAsk = { Rate : decimal
                             Amount : decimal
@@ -71,7 +60,6 @@ module Model =
     type BitFinexPairDetails = {  Pair : string; PricePrecision : int; InitialMargin : decimal; 
                                   MinimumMargin : decimal;  MaximumOrderSize : decimal; 
                                   Expiration : string; Margin : bool }
-
 
     [<AllowNullLiteral>]
     type BitFinexOrderStatus() = 
@@ -150,22 +138,94 @@ module Model =
             [<JsonProperty(PropertyName = "available")>]
             member x.Available with get() = available
                                  and set(v) = available <- v
-             
- (*
-        public class BitFinexWalletBalance
-    {
-        [JsonProperty("type")]
-        public string Type { get; set; }
-        [JsonProperty("currency")]
-        public string Currency { get; set; }
-        [JsonProperty("amount")]
-        public decimal Amount { get; set; }
-        [JsonProperty("available")]
-        public decimal Available { get; set; }
-    }
-    *)
 
+    [<AllowNullLiteral>]
+    type BitFinexFee() = 
+            let mutable pairs = ""
+            let mutable makerFees = 0m
+            let mutable takerFees = 0m
+            [<JsonProperty(PropertyName = "pair")>]
+            member x.Pairs with get() = pairs
+                              and set(v) = pairs <- v
+            [<JsonProperty(PropertyName = "maker_fees")>]
+            member x.MakerFees with get() = makerFees
+                                 and set(v) = makerFees <- v
+            [<JsonProperty(PropertyName = "taker_fees")>]
+            member x.TakerFees with get() = takerFees
+                                 and set(v) = takerFees <- v
+
+    [<AllowNullLiteral>]
+    type BitFinexAccountInfo() = 
+            let mutable fees:List<BitFinexFee> = null
+            [<JsonProperty(PropertyName = "fees")>]
+            member x.Fees with get() = fees
+                              and set(v) = fees <- v
+
+    [<AllowNullLiteral>]
+    type BitFinexMarginLimit() = 
+            let mutable onpair = ""
+            let mutable initialMargin = 0m
+            let mutable marginRequirement = 0m
+            let mutable tradableBalance = 0m
+            [<JsonProperty(PropertyName = "on_pair")>]
+            member x.Pairs with get() = onpair
+                           and set(v) = onpair <- v
+            [<JsonProperty(PropertyName = "initial_margin")>]
+            member x.InitialMargin with get() = initialMargin
+                                   and set(v) = initialMargin <- v
+            [<JsonProperty(PropertyName = "margin_requirement")>]
+            member x.MarginRequirement with get() = marginRequirement
+                                       and set(v) = marginRequirement <- v
+            [<JsonProperty(PropertyName = "tradable_balance")>]
+            member x.TradableBalance with get() = tradableBalance
+                                     and set(v) = tradableBalance <- v
+    
+    [<AllowNullLiteral>]
+    type BitFinexMargin() = 
+            let mutable marginBalance = ""
+            let mutable tradableBalance = ""
+            let mutable unrealizedPl = 0
+            let mutable unrealizedSwap = 0
+            let mutable netValue = ""
+            let mutable requiredMargin = 0
+            let mutable leverage = ""
+            let mutable marginRequirement = ""
+            let mutable marginLimits:List<BitFinexMarginLimit> = null
+            let mutable message = ""
+            [<JsonProperty(PropertyName = "margin_balance")>]
+            member x.MarginBalance with get() = marginBalance
+                                    and set(v) = marginBalance <- v
+            [<JsonProperty(PropertyName = "tradable_balance")>]
+            member x.TradableBalance with get() = tradableBalance
+                                     and set(v) = tradableBalance <- v
+            [<JsonProperty(PropertyName = "unrealized_pl")>]
+            member x.UnrealizedPl with get() = unrealizedPl
+                                  and set(v) = unrealizedPl <- v
+            [<JsonProperty(PropertyName = "unrealized_swap")>]
+            member x.UnrealizedSwap with get() = unrealizedSwap
+                                    and set(v) = unrealizedSwap <- v
+            [<JsonProperty(PropertyName = "net_value")>]
+            member x.NetValue with get() = netValue
+                              and set(v) = netValue <- v
+            [<JsonProperty(PropertyName = "required_margin")>]
+            member x.RequiredMargin with get() = requiredMargin
+                                    and set(v) = requiredMargin <- v
+            [<JsonProperty(PropertyName = "leverage")>]
+            member x.Leverage with get() = leverage
+                              and set(v) = leverage <- v
+            [<JsonProperty(PropertyName = "margin_requirement")>]
+            member x.MarginRequirement with get() = marginRequirement
+                                       and set(v) = marginRequirement <- v
+            [<JsonProperty(PropertyName = "margin_limits")>]
+            member x.MarginLimits with get() = marginLimits
+                                  and set(v) = marginLimits <- v
+            [<JsonProperty(PropertyName = "message")>]
+            member x.Message with get() = message
+                             and set(v) = message <- v
+         
 module Utils =
+    open System.Globalization;
+
     let getNonce = let currentNonce = DateTime.UtcNow.AddDays(1.0).Ticks
                    currentNonce
 
@@ -186,7 +246,7 @@ module Utils =
                                                             hashMaker.ComputeHash(data)
 
     let Sign(payload: string, secretKey:string) = let data = BitConverter.ToString(SignHMacSha384(secretKey, Encoding.UTF8.GetBytes(payload)))
-                                                  data.Replace("-", "").ToLower()
+                                                  data.Replace("-", String.Empty).ToLower()
 
     let UnixTimeStampToDateTime(unixTimeStamp:double) : DateTime = let dtDateTime = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                                                                    let dtDateTime = dtDateTime.AddSeconds(unixTimeStamp).ToLocalTime()
@@ -221,6 +281,38 @@ module Utils =
     let Query<'T>(url) = let data = Http.RequestString(url)
                          JsonConvert.DeserializeObject<'T>(data)
 
+    [<Literal>]
+    let private EnglishCultureName = "English";
+
+    type CultureHelper=
+        static member GetEnglishCulture() =
+                    let cultures = CultureInfo.GetCultures(CultureTypes.AllCultures)
+                    // get culture by it's english name 
+                    let culture = cultures.FirstOrDefault(fun c -> c.EnglishName.Equals(EnglishCultureName, StringComparison.InvariantCultureIgnoreCase))
+                    culture
+[<AutoOpen>]
+module Constants = 
+  [<Literal>]
+  let TypeMarket = "market"
+  [<Literal>]
+  let TypeLimit = "limit"
+  [<Literal>]
+  let TypeStop = "stop"
+  [<Literal>]
+  let TypeTrailingStop = "trailing-stop"
+  [<Literal>]
+  let TypeFillOrKill = "fill-or-kill"
+  [<Literal>]
+  let TypeExchangeMarket = "exchange market"
+  [<Literal>]
+  let TypeExchangeLimit = "exchange limit"
+  [<Literal>]
+  let TypeExchangeStop = "exchange stop"
+  [<Literal>]
+  let TypeExchangeTrailingStop = "exchange trailing-stop"
+  [<Literal>]
+  let TypeExchangeFillOrKill = "exchange fill-or-kill"
+
 module WebApi =
     open Utils
     open Model
@@ -230,6 +322,10 @@ module WebApi =
     open System.Net.Http
     open System.Threading
     open System.IO
+
+    type BitFinexOrderSide=
+    |  Sell
+    |  Buy
 
 
     [<Interface>]
@@ -282,8 +378,13 @@ module WebApi =
         abstract GetLendBookAsync: string * CancellationToken -> Task<BitFinexLendBook>
         abstract GetLendBookAsync: string * CancellationToken option -> Task<BitFinexLendBook>
 //--------------------------------------------------------------------------------------------------------
-        abstract GetWalletBalances: unit -> Async<List<BitFinexWalletBalance>>
-        abstract GetActiveOrders: unit -> Async<List<BitFinexOrderStatus>>
+        abstract AsyncGetWalletBalances: unit -> Async<List<BitFinexWalletBalance>>
+        abstract AsyncGetActiveOrders: unit -> Async<List<BitFinexOrderStatus>>
+        abstract AsyncGetAccountInfos: unit -> Async<List<BitFinexAccountInfo>>
+        abstract AsyncGetMarginInfos: unit -> Async<List<BitFinexMargin>>
+        abstract AsyncNewOrder: Order * BitFinexOrderSide * string -> Async<BitFinexOrderStatus>
+        abstract AsyncCancelOrder: int -> Async<BitFinexOrderStatus>
+        abstract AsyncCancelAllOrder: unit -> Async<BitFinexResponse>
         
 
     type BitFinexPair = JsonProvider<"./data/BitFinexPair.json">
@@ -337,9 +438,12 @@ module WebApi =
                                         let parameters' = 
                                             let m = (Seq.length parameters)
                                             match m with
-                                            | 1 -> seq { yield Seq.item 0 parameters; yield ("nonce", Convert.ToString(getNonce) :> obj); } 
-                                            | n when n > 1 -> seq { yield Seq.item 0 parameters; yield ("nonce", Convert.ToString(getNonce) :> obj);  for i in 1..(Seq.length parameters) do yield (Seq.item i parameters) }
+                                            | 1 -> seq { yield Seq.item 0 parameters; yield ("nonce", getNonce.ToString("D") :> obj); } 
+                                            | n when n > 1 -> seq { yield Seq.item 0 parameters; yield ("nonce", getNonce.ToString("D") :> obj);  for i in 1..(Seq.length parameters) do yield (Seq.item i parameters) }
                                             | _ -> raise(Exception("parameters can't be empty sequence"))
+                                        #if DEBUG
+                                        printfn "PrivateQuery parameters %A" parameters'
+                                        #endif
                                         let! resultData = AsyncPrivateQuery(url, parameters', apiKey, apiSecret, webtimeout)
                                         let mutable response:BitFinexResponse = null
                                         try
@@ -354,23 +458,68 @@ module WebApi =
                                         | _ as ex -> return reraise' ex
                                  }
 
-    let private GetActiveOrders( apiKey:string, apiSecret:string, webtimeout:int )=
+    let private GetActiveOrders(apiKey:string, apiSecret:string, webtimeout:int)=
                                 async{
                                     let methods = "v1/orders"
                                     let! data = PrivateQuery<List<BitFinexOrderStatus>>(baseUrl +^ methods, seq {  yield ("request", ("/" + methods) :> obj) }, apiKey, apiSecret, webtimeout)
                                     return data
                                 }
     
-    let private GetWalletBalances( apiKey:string, apiSecret:string, webtimeout:int )=
+    let private GetWalletBalances(apiKey:string, apiSecret:string, webtimeout:int)=
                                 async{
                                     let methods = "v1/balances"
-                                    let! data = PrivateQuery<List<BitFinexWalletBalance>>(baseUrl +^ methods, seq {  yield ("request", ("/" + methods) :> obj) }, apiKey, apiSecret, webtimeout)
+                                    let! data = PrivateQuery<List<BitFinexWalletBalance>>(baseUrl +^ methods, [("request", ("/" + methods) :> obj)], apiKey, apiSecret, webtimeout)
                                     return data
                                 }
-                    
-     
-   
-                                    
+
+    let private GetAccountInfos(apiKey:string, apiSecret:string, webtimeout:int)=
+                                async{
+                                    let methods = "v1/account_infos"
+                                    let! data = PrivateQuery<List<BitFinexAccountInfo>>(baseUrl +^ methods, [("request", ("/" + methods) :> obj)], apiKey, apiSecret, webtimeout)
+                                    return data
+                                }
+
+    let private GetMarginInfos(apiKey:string, apiSecret:string, webtimeout:int)=
+                                async{
+                                    let methods = "v1/margin_infos"
+                                    let! data = PrivateQuery<List<BitFinexMargin>>(baseUrl +^ methods, [("request", ("/" + methods) :> obj)], apiKey, apiSecret, webtimeout)
+                                    return data
+                                }  
+                                
+    let private NewOrder(order:Order, side:BitFinexOrderSide,type':string,apiKey:string, apiSecret:string, webtimeout:int)=
+                                async{
+                                    if type'.IsNullOrEmpty() then nullArg "parameter type' can't be null or empty."
+                                    let methods = "v1/order/new"
+                                    let culture = CultureHelper.GetEnglishCulture()
+                                    let! data = PrivateQuery<BitFinexOrderStatus>(baseUrl +^ methods, 
+                                                                                        [("request", ("/" + methods) :> obj);
+                                                                                         ("symbol", order.Pair.ToString() :> obj);
+                                                                                         ("amount", Convert.ToString(order.Amount, culture.NumberFormat) :> obj);
+                                                                                         ("price", Convert.ToString(order.Price, culture.NumberFormat) :> obj);
+                                                                                         ("exchange", "bitfinex" :> obj);
+                                                                                         ("side", side.ToString().ToLower() :> obj);
+                                                                                         ("type", (sprintf "exchange %s" type').ToLower():> obj);
+                                                                                        ],
+                                                                                        apiKey, apiSecret, webtimeout)
+                                    return data
+                                }
+
+    let private CancelOrder(orderId:int, apiKey:string, apiSecret:string, webtimeout:int)=
+                                async{
+                                    let methods = "v1/order/cancel"
+                                    let! data = PrivateQuery<BitFinexOrderStatus>(baseUrl +^ methods, 
+                                                                                        [("request", ("/" + methods) :> obj);
+                                                                                         ("order_id", orderId :> obj)],
+                                                                                        apiKey, apiSecret, webtimeout)
+                                    return data
+                                }
+      
+    let private CancelAllOrder(apiKey:string, apiSecret:string, webtimeout:int)=
+                                async{
+                                    let methods = "v1/order/cancel/all"
+                                    let! data = PrivateQuery<BitFinexResponse>(baseUrl +^ methods, [("request", ("/" + methods) :> obj)], apiKey, apiSecret, webtimeout)
+                                    return data
+                                }
 
     let inline private getWebResponseMessage(response:WebResponse) = use stream = response.GetResponseStream() 
                                                                      use reader = new StreamReader(stream) 
@@ -768,8 +917,14 @@ module WebApi =
                                                                                    | null -> nullArg "currency" 
                                                                                    | _ -> Async.StartAsTask(x.AsyncRunWithRetries ((fun()->GetLendBookAsync(currency, deftoken, webtimeout)),  defaultRetryParams))
 
-            member x.GetWalletBalances() = x.AsyncRunWithRetries ((fun()->GetWalletBalances(apiKey, apiSecret, webtimeout)),  defaultRetryParams)
-            member x.GetActiveOrders() = x.AsyncRunWithRetries ((fun()->GetActiveOrders(apiKey, apiSecret, webtimeout)),  defaultRetryParams)
+            member x.AsyncGetWalletBalances() = x.AsyncRunWithRetries ((fun()->GetWalletBalances(apiKey, apiSecret, webtimeout)),  defaultRetryParams)
+            member x.AsyncGetActiveOrders() = x.AsyncRunWithRetries ((fun()->GetActiveOrders(apiKey, apiSecret, webtimeout)),  defaultRetryParams)
+            member x.AsyncGetAccountInfos() = x.AsyncRunWithRetries ((fun()->GetAccountInfos(apiKey, apiSecret, webtimeout)),  defaultRetryParams)
+            member x.AsyncGetMarginInfos() = x.AsyncRunWithRetries ((fun()->GetMarginInfos(apiKey, apiSecret, webtimeout)),  defaultRetryParams)
+            member x.AsyncNewOrder(order:Order, side:BitFinexOrderSide,type':string)= x.AsyncRunWithRetries ((fun()->NewOrder(order, side, type', apiKey, apiSecret, webtimeout)),  defaultRetryParams)
+            member x.AsyncCancelOrder(orderId:int) = x.AsyncRunWithRetries ((fun()->CancelOrder(orderId, apiKey, apiSecret, webtimeout)),  defaultRetryParams)
+            member x.AsyncCancelAllOrder() = x.AsyncRunWithRetries ((fun()->CancelAllOrder(apiKey, apiSecret, webtimeout)),  defaultRetryParams)
+            
 
          member x.GetSupportedPairs() = (x :> IBitFinexApi).GetSupportedPairs()
          member x.AsyncGetSupportedPairs() = (x :> IBitFinexApi).AsyncGetSupportedPairs()
@@ -823,9 +978,13 @@ module WebApi =
          member x.GetLendBookAsync(currency:string, token:CancellationToken) = (x :> IBitFinexApi).GetLendBookAsync(currency, token)
          member x.GetLendBookAsync(currency:string, ?token:CancellationToken) = (x :> IBitFinexApi).GetLendBookAsync(currency, token)
 //------------------------------------------------------------------------------------------------------------------------------------------------
-         member x.GetWalletBalances() = (x :> IBitFinexApi).GetWalletBalances()
-         member x.GetActiveOrders() = (x :> IBitFinexApi).GetActiveOrders()
-                                                
+         member x.AsyncGetWalletBalances() = (x :> IBitFinexApi).AsyncGetWalletBalances()
+         member x.AsyncGetActiveOrders() = (x :> IBitFinexApi).AsyncGetActiveOrders()
+         member x.AsyncGetAccountInfos() = (x :> IBitFinexApi).AsyncGetAccountInfos()
+         member x.AsyncGetMarginInfos() = (x :> IBitFinexApi).AsyncGetMarginInfos()
+         member x.AsyncNewOrder(order:Order, side:BitFinexOrderSide, type':string) = (x :> IBitFinexApi).AsyncNewOrder(order, side, type')
+         member x.AsyncCancelOrder(orderId:int) = (x :> IBitFinexApi).AsyncCancelOrder(orderId)
+         member x.AsyncCancelAllOrder() = (x :> IBitFinexApi).AsyncCancelAllOrder()                                 
 
     
                                        
