@@ -39,6 +39,8 @@ module Model =
                              and set(v) = orderId <- v
             member x.IsSuccess = String.IsNullOrEmpty(x.Message)
 
+
+
     type BitFinexBidAsk = { Rate : decimal
                             Amount : decimal
                             Period : int
@@ -70,6 +72,98 @@ module Model =
                                   MinimumMargin : decimal;  MaximumOrderSize : decimal; 
                                   Expiration : string; Margin : bool }
 
+
+    [<AllowNullLiteral>]
+    type BitFinexOrderStatus() = 
+            let mutable id:int = 0
+            let mutable symbol = ""
+            let mutable exchange = ""
+            let mutable price = 0m
+            let mutable avgExecutionPrice = 0m
+            let mutable type' = ""
+            let mutable timestamp = ""
+            let mutable isLive = false
+            let mutable isCancelled = false
+            let mutable wasForced = false
+            let mutable executedAmount = 0m
+            let mutable remainingAmount = 0m
+            let mutable originalAmount = 0m
+            let mutable orderid:int = 0
+            [<JsonProperty(PropertyName = "id")>]
+            member x.Id with get() = id
+                             and set(v) = id <- v
+            [<JsonProperty(PropertyName = "symbol")>]
+            member x.Symbol with get() = symbol
+                             and set(v) = symbol <- v
+            [<JsonProperty(PropertyName = "exchange")>]
+            member x.Exchange with get() = exchange
+                              and set(v) = exchange <- v
+            [<JsonProperty(PropertyName = "price")>]
+            member x.Price with get() = price
+                              and set(v) = price <- v
+            [<JsonProperty(PropertyName = "avg_execution_price")>]
+            member x.AvgExecutionPrice with get() = avgExecutionPrice
+                                        and set(v) = avgExecutionPrice <- v
+            [<JsonProperty(PropertyName = "type")>]
+            member x.Type with get() = type'
+                              and set(v) = type' <- v
+            [<JsonProperty(PropertyName = "timestamp")>]
+            member x.Timestamp with get() = timestamp
+                                 and set(v) = timestamp <- v
+            [<JsonProperty(PropertyName = "is_live")>]
+            member x.IsLive with get() = isLive
+                                 and set(v) = isLive <- v
+            [<JsonProperty(PropertyName = "is_cancelled")>]
+            member x.IsCancelled with get() = isCancelled
+                                 and set(v) = isCancelled <- v
+            [<JsonProperty(PropertyName = "was_forced")>]
+            member x.WasForced with get() = wasForced
+                                 and set(v) = wasForced <- v
+            [<JsonProperty(PropertyName = "executed_amount")>]
+            member x.ExecutedAmount with get() = executedAmount
+                                    and set(v) = executedAmount <- v
+            [<JsonProperty(PropertyName = "remaining_amount")>]
+            member x.RemainingAmount with get() = remainingAmount
+                                     and set(v) = remainingAmount <- v
+            [<JsonProperty(PropertyName = "original_amount")>]
+            member x.OriginalAmount with get() = originalAmount
+                                     and set(v) = originalAmount <- v
+            [<JsonProperty(PropertyName = "order_id")>]
+            member x.OrderId with get() = orderid
+                                     and set(v) = orderid <- v
+
+    [<AllowNullLiteral>]
+    type BitFinexWalletBalance() = 
+            let mutable type' = ""
+            let mutable currency = ""
+            let mutable amount = 0m
+            let mutable available = 0m
+            [<JsonProperty(PropertyName = "type")>]
+            member x.Type with get() = type'
+                              and set(v) = type' <- v
+            [<JsonProperty(PropertyName = "currency")>]
+            member x.Currency with get() = currency
+                                 and set(v) = currency <- v
+            [<JsonProperty(PropertyName = "amount")>]
+            member x.Amount with get() = amount
+                                 and set(v) = amount <- v
+            [<JsonProperty(PropertyName = "available")>]
+            member x.Available with get() = available
+                                 and set(v) = available <- v
+             
+ (*
+        public class BitFinexWalletBalance
+    {
+        [JsonProperty("type")]
+        public string Type { get; set; }
+        [JsonProperty("currency")]
+        public string Currency { get; set; }
+        [JsonProperty("amount")]
+        public decimal Amount { get; set; }
+        [JsonProperty("available")]
+        public decimal Available { get; set; }
+    }
+    *)
 
 module Utils =
     let getNonce = let currentNonce = DateTime.UtcNow.AddDays(1.0).Ticks
@@ -187,6 +281,10 @@ module WebApi =
         abstract GetLendBookAsync: string -> Task<BitFinexLendBook>
         abstract GetLendBookAsync: string * CancellationToken -> Task<BitFinexLendBook>
         abstract GetLendBookAsync: string * CancellationToken option -> Task<BitFinexLendBook>
+//--------------------------------------------------------------------------------------------------------
+        abstract GetWalletBalances: unit -> Async<List<BitFinexWalletBalance>>
+        abstract GetActiveOrders: unit -> Async<List<BitFinexOrderStatus>>
+        
 
     type BitFinexPair = JsonProvider<"./data/BitFinexPair.json">
     type BitFinexPairDetails = JsonProvider<"./data/BitFinexPairDetails.json">
@@ -247,7 +345,7 @@ module WebApi =
                                         try
                                             response <- JsonConvert.DeserializeObject<BitFinexResponse>(resultData)
                                         with 
-                                            |_ ->()
+                                            | _ -> ()
                                         if response <> Unchecked.defaultof<_> && not response.IsSuccess then 
                                             return raise(Exception(response.Message))
                                         else
@@ -255,6 +353,23 @@ module WebApi =
                                     with 
                                         | _ as ex -> return reraise' ex
                                  }
+
+    let private GetActiveOrders( apiKey:string, apiSecret:string, webtimeout:int )=
+                                async{
+                                    let methods = "v1/orders"
+                                    let! data = PrivateQuery<List<BitFinexOrderStatus>>(baseUrl +^ methods, seq {  yield ("request", ("/" + methods) :> obj) }, apiKey, apiSecret, webtimeout)
+                                    return data
+                                }
+    
+    let private GetWalletBalances( apiKey:string, apiSecret:string, webtimeout:int )=
+                                async{
+                                    let methods = "v1/balances"
+                                    let! data = PrivateQuery<List<BitFinexWalletBalance>>(baseUrl +^ methods, seq {  yield ("request", ("/" + methods) :> obj) }, apiKey, apiSecret, webtimeout)
+                                    return data
+                                }
+                    
+     
+   
                                     
 
     let inline private getWebResponseMessage(response:WebResponse) = use stream = response.GetResponseStream() 
@@ -653,6 +768,9 @@ module WebApi =
                                                                                    | null -> nullArg "currency" 
                                                                                    | _ -> Async.StartAsTask(x.AsyncRunWithRetries ((fun()->GetLendBookAsync(currency, deftoken, webtimeout)),  defaultRetryParams))
 
+            member x.GetWalletBalances() = x.AsyncRunWithRetries ((fun()->GetWalletBalances(apiKey, apiSecret, webtimeout)),  defaultRetryParams)
+            member x.GetActiveOrders() = x.AsyncRunWithRetries ((fun()->GetActiveOrders(apiKey, apiSecret, webtimeout)),  defaultRetryParams)
+
          member x.GetSupportedPairs() = (x :> IBitFinexApi).GetSupportedPairs()
          member x.AsyncGetSupportedPairs() = (x :> IBitFinexApi).AsyncGetSupportedPairs()
          /// Expose C#-friendly asynchronous method that returns Task
@@ -704,6 +822,9 @@ module WebApi =
          member x.GetLendBookAsync(currency:string) = (x :> IBitFinexApi).GetLendBookAsync(currency)
          member x.GetLendBookAsync(currency:string, token:CancellationToken) = (x :> IBitFinexApi).GetLendBookAsync(currency, token)
          member x.GetLendBookAsync(currency:string, ?token:CancellationToken) = (x :> IBitFinexApi).GetLendBookAsync(currency, token)
+//------------------------------------------------------------------------------------------------------------------------------------------------
+         member x.GetWalletBalances() = (x :> IBitFinexApi).GetWalletBalances()
+         member x.GetActiveOrders() = (x :> IBitFinexApi).GetActiveOrders()
                                                 
 
     
