@@ -8,6 +8,7 @@ open Microsoft.VisualStudio.TestTools.UnitTesting
 open CryptCurrency.Common.DataContracts
 open CryptCurrency.BitFinex.WebApi
 open CryptCurrency.BitFinex.Model
+open Newtonsoft.Json
 
 module WebApiKeys =
     [<Literal>]
@@ -611,4 +612,31 @@ module MSTests =
                | :? AggregateException as agx when (agx.InnerException :? WebApiError) && (agx.InnerException :?> WebApiError).Code = 400 
                                                    && (agx.InnerException :?> WebApiError).InnerException.
                                                    Message.Contains("(400) Bad Request") -> Assert.IsTrue(true);
+               | _ -> Assert.IsTrue(false);
+
+        [<TestMethod>]
+        member this.GetAccountInfoFromJson () =
+            try
+                let data = "[{\
+  \"maker_fees\":\"0.1\",
+  \"taker_fees\":\"0.2\",
+  \"fees\":[{
+    \"pairs\":\"BTC\",
+    \"maker_fees\":\"0.1\",
+    \"taker_fees\":\"0.2\"
+   },{
+    \"pairs\":\"LTC\",
+    \"maker_fees\":\"0.1\",
+    \"taker_fees\":\"0.2\"
+   },
+   {
+    \"pairs\":\"ETH\",
+    \"maker_fees\":\"0.1\",
+    \"taker_fees\":\"0.2\"
+  }]
+}]"
+                let result = JsonConvert.DeserializeObject<List<BitFinexAccountInfo>>(data)
+                Assert.IsTrue(result |> (not << Seq.isEmpty));
+            with 
+
                | _ -> Assert.IsTrue(false);

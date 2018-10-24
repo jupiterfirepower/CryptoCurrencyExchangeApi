@@ -222,6 +222,30 @@ module Model =
             [<JsonProperty(PropertyName = "message")>]
             member x.Message with get() = message
                              and set(v) = message <- v
+
+    [<AllowNullLiteral>]
+    type BitFinexMyTrade() = 
+            [<JsonProperty(PropertyName = "price")>]
+            member val Price = 0m  with get, set
+            [<JsonProperty(PropertyName = "amount")>]
+            member val Amount = 0m with get, set
+            [<JsonProperty(PropertyName = "timestamp")>]
+            member val TimeStamp=double 0.0 with get, set
+            [<JsonProperty(PropertyName = "until")>]
+            member val Until=0L with get, set
+            [<JsonProperty(PropertyName = "exchange")>]
+            member val Exchange="" with get, set
+            [<JsonProperty(PropertyName = "type")>]
+            member val Type="" with get, set
+            [<JsonProperty(PropertyName = "fee_currency")>]
+            member val FeeCurrency="" with get, set
+            [<JsonProperty(PropertyName = "fee_amount")>]
+            member val FeeAmount=0m with get, set
+            [<JsonProperty(PropertyName = "tid")>]
+            member val Tid=0L with get, set
+            [<JsonProperty(PropertyName = "order_id")>]
+            member val OrderId=0L with get, set
+
          
 module Utils =
     open System.Globalization;
@@ -271,8 +295,7 @@ module Utils =
 
     let PrivateQuery(key: string, secret : string, url: string, parameters: seq<string * obj>) : string = 
         try
-            let nonce = Convert.ToString(getNonce)
-            let parameters' = Seq.append parameters [("nonce", Convert.ToString(getNonce) :> obj)]
+            let parameters' = Seq.append parameters [("nonce", getNonce.ToString("D") :> obj)]
             let resultData = privateQuery(key, secret, url, parameters')
             resultData
         with
@@ -385,6 +408,8 @@ module WebApi =
         abstract AsyncNewOrder: Order * BitFinexOrderSide * string -> Async<BitFinexOrderStatus>
         abstract AsyncCancelOrder: int -> Async<BitFinexOrderStatus>
         abstract AsyncCancelAllOrder: unit -> Async<BitFinexResponse>
+        abstract AsyncGetOrderStatus: int -> Async<BitFinexOrderStatus>
+        abstract AsyncGetMyTrades: PairClass * double option * int option -> Async<List<BitFinexMyTrade>>
         
 
     type BitFinexPair = JsonProvider<"./data/BitFinexPair.json">
@@ -520,6 +545,29 @@ module WebApi =
                                     let! data = PrivateQuery<BitFinexResponse>(baseUrl +^ methods, [("request", ("/" + methods) :> obj)], apiKey, apiSecret, webtimeout)
                                     return data
                                 }
+
+    let private GetOrderStatus(orderId:int, apiKey:string, apiSecret:string, webtimeout:int)=
+                                async{
+                                    let methods = "v1/order/status"
+                                    let! data = PrivateQuery<BitFinexOrderStatus>(baseUrl +^ methods, 
+                                                                                        [("request", ("/" + methods) :> obj);
+                                                                                         ("order_id", orderId :> obj)],
+                                                                                        apiKey, apiSecret, webtimeout)
+                                    return data
+                                }
+
+    let private GetMyTrades(pair:PairClass, timeStamp:double,limitTrades:int,apiKey:string, apiSecret:string, webtimeout:int)=
+                                async{
+                                    let methods = "v1/mytrades"
+                                    let parameters = [("request", ("/" + methods) :> obj);
+                                                      ("symbol", pair.ToString().ToUpper() :> obj);
+                                                      ("limit_trades", limitTrades :> obj);
+                                                      ("timestamp", timeStamp :> obj)]
+
+                                    let! data = PrivateQuery<List<BitFinexMyTrade>>(baseUrl +^ methods, parameters, apiKey, apiSecret, webtimeout)
+                                    return data
+                                }
+
 
     let inline private getWebResponseMessage(response:WebResponse) = use stream = response.GetResponseStream() 
                                                                      use reader = new StreamReader(stream) 
@@ -921,9 +969,14 @@ module WebApi =
             member x.AsyncGetActiveOrders() = x.AsyncRunWithRetries ((fun()->GetActiveOrders(apiKey, apiSecret, webtimeout)),  defaultRetryParams)
             member x.AsyncGetAccountInfos() = x.AsyncRunWithRetries ((fun()->GetAccountInfos(apiKey, apiSecret, webtimeout)),  defaultRetryParams)
             member x.AsyncGetMarginInfos() = x.AsyncRunWithRetries ((fun()->GetMarginInfos(apiKey, apiSecret, webtimeout)),  defaultRetryParams)
-            member x.AsyncNewOrder(order:Order, side:BitFinexOrderSide,type':string)= x.AsyncRunWithRetries ((fun()->NewOrder(order, side, type', apiKey, apiSecret, webtimeout)),  defaultRetryParams)
+            member x.AsyncNewOrder(order:Order, side:BitFinexOrderSide,type':string) = if isNull type' then nullArg "type'"
+                                                                                       x.AsyncRunWithRetries ((fun()->NewOrder(order, side, type', apiKey, apiSecret, webtimeout)),  defaultRetryParams)
             member x.AsyncCancelOrder(orderId:int) = x.AsyncRunWithRetries ((fun()->CancelOrder(orderId, apiKey, apiSecret, webtimeout)),  defaultRetryParams)
             member x.AsyncCancelAllOrder() = x.AsyncRunWithRetries ((fun()->CancelAllOrder(apiKey, apiSecret, webtimeout)),  defaultRetryParams)
+            member x.AsyncGetOrderStatus(orderId:int) = x.AsyncRunWithRetries ((fun()->GetOrderStatus(orderId, apiKey, apiSecret, webtimeout)),  defaultRetryParams)
+            member x.AsyncGetMyTrades(pair:PairClass, ?timeStamp:double,?limitTrades:int) = let timeStamp' = defaultArg timeStamp 0.0
+                                                                                            let limitTrades' = defaultArg limitTrades 1000
+                                                                                            x.AsyncRunWithRetries ((fun()->GetMyTrades(pair, timeStamp', limitTrades', apiKey, apiSecret, webtimeout)),  defaultRetryParams)
             
 
          member x.GetSupportedPairs() = (x :> IBitFinexApi).GetSupportedPairs()
@@ -984,8 +1037,9 @@ module WebApi =
          member x.AsyncGetMarginInfos() = (x :> IBitFinexApi).AsyncGetMarginInfos()
          member x.AsyncNewOrder(order:Order, side:BitFinexOrderSide, type':string) = (x :> IBitFinexApi).AsyncNewOrder(order, side, type')
          member x.AsyncCancelOrder(orderId:int) = (x :> IBitFinexApi).AsyncCancelOrder(orderId)
-         member x.AsyncCancelAllOrder() = (x :> IBitFinexApi).AsyncCancelAllOrder()                                 
-
+         member x.AsyncCancelAllOrder() = (x :> IBitFinexApi).AsyncCancelAllOrder()   
+         member x.AsyncGetOrderStatus(orderId:int) = (x :> IBitFinexApi).AsyncGetOrderStatus(orderId)
+         member x.AsyncGetMyTrades(pair:PairClass, ?timeStamp:double,?limitTrades:int) = (x :> IBitFinexApi).AsyncGetMyTrades(pair,timeStamp,limitTrades)
     
                                        
 
