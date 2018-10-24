@@ -559,10 +559,12 @@ module WebApi =
     let private GetMyTrades(pair:PairClass, timeStamp:double,limitTrades:int,apiKey:string, apiSecret:string, webtimeout:int)=
                                 async{
                                     let methods = "v1/mytrades"
-                                    let parameters = [("request", ("/" + methods) :> obj);
-                                                      ("symbol", pair.ToString().ToUpper() :> obj);
-                                                      ("limit_trades", limitTrades :> obj);
-                                                      ("timestamp", timeStamp :> obj)]
+                                    let mutable parameters: seq<string * obj> = null
+                                    parameters <- [("request", ("/" + methods) :> obj);
+                                                   ("symbol", pair.ToString().ToUpper() :> obj);
+                                                   ("limit_trades", limitTrades :> obj)]
+                                    
+                                    if timeStamp > 0.0 then parameters <- Seq.append parameters [("timestamp", timeStamp :> obj)]
 
                                     let! data = PrivateQuery<List<BitFinexMyTrade>>(baseUrl +^ methods, parameters, apiKey, apiSecret, webtimeout)
                                     return data
