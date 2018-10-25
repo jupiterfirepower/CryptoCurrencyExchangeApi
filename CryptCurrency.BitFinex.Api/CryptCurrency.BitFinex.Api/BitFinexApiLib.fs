@@ -246,7 +246,38 @@ module Model =
             [<JsonProperty(PropertyName = "order_id")>]
             member val OrderId=0L with get, set
 
-         
+    [<AllowNullLiteral>]
+    type BitFinexPosition() = 
+            [<JsonProperty(PropertyName = "id")>]
+            member val Id = ""  with get, set
+            [<JsonProperty(PropertyName = "symbol")>]
+            member val Symbol = "" with get, set
+            [<JsonProperty(PropertyName = "status")>]
+            member val Status="" with get, set
+            [<JsonProperty(PropertyName = "base")>]
+            member val Base=0m with get, set
+            [<JsonProperty(PropertyName = "amount")>]
+            member val Amount=0m with get, set
+            [<JsonProperty(PropertyName = "timestamp")>]
+            member val Timestamp="" with get, set
+            [<JsonProperty(PropertyName = "swap")>]
+            member val Swap="" with get, set
+            [<JsonProperty(PropertyName = "pl")>]
+            member val Pl=0m with get, set
+
+    [<AllowNullLiteral>]
+    type BitFinexBalanceHistory() = 
+            [<JsonProperty(PropertyName = "currency")>]
+            member val Currency = ""  with get, set
+            [<JsonProperty(PropertyName = "amount")>]
+            member val Amount=0m with get, set
+            [<JsonProperty(PropertyName = "balance")>]
+            member val Balance=0m with get, set
+            [<JsonProperty(PropertyName = "description")>]
+            member val Description="" with get, set
+            [<JsonProperty(PropertyName = "timestamp")>]
+            member val TimeStamp=double 0.0 with get, set
+
 module Utils =
     open System.Globalization;
 
@@ -316,16 +347,6 @@ module Utils =
 [<AutoOpen>]
 module Constants = 
   [<Literal>]
-  let TypeMarket = "market"
-  [<Literal>]
-  let TypeLimit = "limit"
-  [<Literal>]
-  let TypeStop = "stop"
-  [<Literal>]
-  let TypeTrailingStop = "trailing-stop"
-  [<Literal>]
-  let TypeFillOrKill = "fill-or-kill"
-  [<Literal>]
   let TypeExchangeMarket = "exchange market"
   [<Literal>]
   let TypeExchangeLimit = "exchange limit"
@@ -350,6 +371,11 @@ module WebApi =
     |  Sell
     |  Buy
 
+
+    type BitFinexWalletType=
+    | Trading
+    | Exchange
+    | Deposit
 
     [<Interface>]
     type IBitFinexApi =
@@ -410,6 +436,8 @@ module WebApi =
         abstract AsyncCancelAllOrder: unit -> Async<BitFinexResponse>
         abstract AsyncGetOrderStatus: int -> Async<BitFinexOrderStatus>
         abstract AsyncGetMyTrades: PairClass * double option * int option -> Async<List<BitFinexMyTrade>>
+        abstract AsyncGetPositions: unit -> Async<List<BitFinexPosition>>
+        abstract AsyncGetBalanceHistory: string * int64 * int64 * int * BitFinexWalletType -> Async<List<BitFinexBalanceHistory>>
         
 
     type BitFinexPair = JsonProvider<"./data/BitFinexPair.json">
@@ -511,7 +539,7 @@ module WebApi =
                                     return data
                                 }  
                                 
-    let private NewOrder(order:Order, side:BitFinexOrderSide,type':string,apiKey:string, apiSecret:string, webtimeout:int)=
+    let private NewOrder(order:Order, side:BitFinexOrderSide, type':string, apiKey:string, apiSecret:string, webtimeout:int)=
                                 async{
                                     if type'.IsNullOrEmpty() then nullArg "parameter type' can't be null or empty."
                                     let methods = "v1/order/new"
@@ -523,8 +551,7 @@ module WebApi =
                                                                                          ("price", Convert.ToString(order.Price, culture.NumberFormat) :> obj);
                                                                                          ("exchange", "bitfinex" :> obj);
                                                                                          ("side", side.ToString().ToLower() :> obj);
-                                                                                         ("type", (sprintf "exchange %s" type').ToLower():> obj);
-                                                                                        ],
+                                                                                         ("type", (sprintf "%s" type').ToLower():> obj)],
                                                                                         apiKey, apiSecret, webtimeout)
                                     return data
                                 }
@@ -567,6 +594,29 @@ module WebApi =
                                     if timeStamp > 0.0 then parameters <- Seq.append parameters [("timestamp", timeStamp :> obj)]
 
                                     let! data = PrivateQuery<List<BitFinexMyTrade>>(baseUrl +^ methods, parameters, apiKey, apiSecret, webtimeout)
+                                    return data
+                                }
+
+    let private GetPositions(apiKey:string, apiSecret:string, webtimeout:int)=
+                                async{
+                                    let methods = "v1/positions"
+                                    let! data = PrivateQuery<List<BitFinexPosition>>(baseUrl +^ methods, 
+                                                                                        [("request", ("/" + methods) :> obj)],
+                                                                                        apiKey, apiSecret, webtimeout)
+                                    return data
+                                }
+
+    let private GetBalanceHistory(currency:string, since:int64, until:int64, limit:int, walletType:BitFinexWalletType, apiKey:string, apiSecret:string, webtimeout:int)=
+                                async{
+                                    let methods = "v1/history"
+                                    let! data = PrivateQuery<List<BitFinexBalanceHistory>>(baseUrl +^ methods, 
+                                                                                        [("request", ("/" + methods) :> obj);
+                                                                                         ("currency", currency :> obj);
+                                                                                         ("since", since :> obj);
+                                                                                         ("until", until :> obj);
+                                                                                         ("limit", limit :> obj);
+                                                                                         ("wallet", walletType.ToString().ToLower():> obj)],
+                                                                                        apiKey, apiSecret, webtimeout)
                                     return data
                                 }
 
@@ -956,6 +1006,7 @@ module WebApi =
             member x.GetLendsAsync(currency:string, ?token:CancellationToken) = let deftoken = defaultArg token Async.DefaultCancellationToken
                                                                                 match currency with
                                                                                 | null -> nullArg "currency" 
+                                                                                | "" -> nullArg "currency" 
                                                                                 | _ -> Async.StartAsTask(x.AsyncRunWithRetries ((fun()->GetLendsAsync(currency, deftoken, webtimeout)),  defaultRetryParams))
 
             member x.GetLendBook(currency:string) = if isNull currency then nullArg "currency" else x.RunWithRetries (fun()->getLendBook(currency,webtimeout)) defaultRetryParams
@@ -965,6 +1016,7 @@ module WebApi =
             member x.GetLendBookAsync(currency:string, ?token:CancellationToken) = let deftoken = defaultArg token Async.DefaultCancellationToken
                                                                                    match currency with
                                                                                    | null -> nullArg "currency" 
+                                                                                   | "" -> nullArg "currency" 
                                                                                    | _ -> Async.StartAsTask(x.AsyncRunWithRetries ((fun()->GetLendBookAsync(currency, deftoken, webtimeout)),  defaultRetryParams))
 
             member x.AsyncGetWalletBalances() = x.AsyncRunWithRetries ((fun()->GetWalletBalances(apiKey, apiSecret, webtimeout)),  defaultRetryParams)
@@ -979,6 +1031,11 @@ module WebApi =
             member x.AsyncGetMyTrades(pair:PairClass, ?timeStamp:double,?limitTrades:int) = let timeStamp' = defaultArg timeStamp 0.0
                                                                                             let limitTrades' = defaultArg limitTrades 1000
                                                                                             x.AsyncRunWithRetries ((fun()->GetMyTrades(pair, timeStamp', limitTrades', apiKey, apiSecret, webtimeout)),  defaultRetryParams)
+            member x.AsyncGetPositions() = x.AsyncRunWithRetries ((fun()->GetPositions(apiKey, apiSecret, webtimeout)),  defaultRetryParams)
+            member x.AsyncGetBalanceHistory(currency:string, since:int64, until:int64, limit:int, walletType:BitFinexWalletType)= if currency.IsNullOrEmpty() then nullArg "currency"
+                                                                                                                                  if limit < 0 then invalidArg "limit" "limit can't be less then zero."
+                                                                                                                                  if until < since then invalidArg "until" "until must be greater then since parameter."
+                                                                                                                                  x.AsyncRunWithRetries ((fun()->GetBalanceHistory(currency, since, until, limit, walletType, apiKey, apiSecret, webtimeout)),  defaultRetryParams)
             
 
          member x.GetSupportedPairs() = (x :> IBitFinexApi).GetSupportedPairs()
@@ -1042,7 +1099,8 @@ module WebApi =
          member x.AsyncCancelAllOrder() = (x :> IBitFinexApi).AsyncCancelAllOrder()   
          member x.AsyncGetOrderStatus(orderId:int) = (x :> IBitFinexApi).AsyncGetOrderStatus(orderId)
          member x.AsyncGetMyTrades(pair:PairClass, ?timeStamp:double,?limitTrades:int) = (x :> IBitFinexApi).AsyncGetMyTrades(pair,timeStamp,limitTrades)
-    
+         member x.AsyncGetPositions() = (x :> IBitFinexApi).AsyncGetPositions()   
+         member x.AsyncGetBalanceHistory(currency:string, since:int64, until:int64, limit:int, walletType:BitFinexWalletType) = (x :> IBitFinexApi).AsyncGetBalanceHistory(currency, since, until, limit, walletType)   
                                        
 
             
