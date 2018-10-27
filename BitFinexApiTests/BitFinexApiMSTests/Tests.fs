@@ -8,6 +8,7 @@ open Microsoft.VisualStudio.TestTools.UnitTesting
 open CryptCurrency.Common.DataContracts
 open CryptCurrency.BitFinex.WebApi
 open CryptCurrency.BitFinex.Model
+open CryptCurrency.BitFinex.Constants
 open Newtonsoft.Json
 
 module WebApiKeys =
@@ -22,6 +23,10 @@ module MSTests =
     [<TestClass>]
     type TestClass () =
         let api = BitFinexApi(apiKey,apiSecret, 10000)
+        let pairBtcUsd = PairClass("btc","usd")
+        let pairBtcMmm = PairClass("btc","mmm")
+        let btc = "btc"
+        let mmm = "mmm"
 
         [<TestMethod>]
         member this.WebApiKeyArgumentNullException () =
@@ -175,30 +180,30 @@ module MSTests =
 
         [<TestMethod>]
         member this.GetTickers () =
-            let ticker = (api :> IBitFinexApi).GetTickers(PairClass("btc","usd"))
+            let ticker = (api :> IBitFinexApi).GetTickers(pairBtcUsd)
             Assert.IsTrue(ticker <> BitFinexTicker.Default);
         
         [<TestMethod>]
         member this.AsyncGetTickers () =
-            let ticker = (api :> IBitFinexApi).AsyncGetTickers(PairClass("btc","usd")) |>  Async.RunSynchronously
+            let ticker = (api :> IBitFinexApi).AsyncGetTickers(pairBtcUsd) |>  Async.RunSynchronously
             Assert.IsTrue(ticker <> BitFinexTicker.Default);
 
         [<TestMethod>]
         member this.GetTickersAsync () =
-            let ticker = (api :> IBitFinexApi).GetTickersAsync(PairClass("btc","usd")) |>  Async.AwaitTask |> Async.RunSynchronously
+            let ticker = (api :> IBitFinexApi).GetTickersAsync(pairBtcUsd) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(ticker <> BitFinexTicker.Default);
 
         [<TestMethod>]
         member this.GetTickersAsyncCancellationToken () =
             let cts = new CancellationTokenSource()
-            let ticker = (api :> IBitFinexApi).GetTickersAsync(PairClass("btc","usd"), cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
+            let ticker = (api :> IBitFinexApi).GetTickersAsync(pairBtcUsd, cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(ticker <> BitFinexTicker.Default)
 
         [<TestMethod>]
         member this.GetTickersAsyncCancellationTokenCancel () =
             try
                 let cts = new CancellationTokenSource()
-                let task = (api :> IBitFinexApi).GetTickersAsync(PairClass("btc","usd"), cts.Token) |>  Async.AwaitTask
+                let task = (api :> IBitFinexApi).GetTickersAsync(pairBtcUsd, cts.Token) |>  Async.AwaitTask
                 cts.Cancel() 
                 task |> Async.RunSynchronously |> ignore
                 Assert.IsTrue(false)
@@ -209,14 +214,14 @@ module MSTests =
         [<TestMethod>]
         member this.GetTickersAsyncCancellationTokenOption () =
             let cts = new CancellationTokenSource()
-            let ticker = (api :> IBitFinexApi).GetTickersAsync(PairClass("btc","usd"), Some cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
+            let ticker = (api :> IBitFinexApi).GetTickersAsync(pairBtcUsd, Some cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(ticker <> BitFinexTicker.Default);
 
         [<TestMethod>]
         member this.GetTickersAsyncCancellationTokenOptionCancel () =
             try
                 let cts = new CancellationTokenSource()
-                let task = (api :> IBitFinexApi).GetTickersAsync(PairClass("btc","usd"), Some cts.Token) |>  Async.AwaitTask
+                let task = (api :> IBitFinexApi).GetTickersAsync(pairBtcUsd, Some cts.Token) |>  Async.AwaitTask
                 cts.Cancel() 
                 task |> Async.RunSynchronously |> ignore
                 Assert.IsTrue(false)
@@ -226,13 +231,13 @@ module MSTests =
 
         [<TestMethod>]
         member this.GetTickersAsyncCancellationTokenOptionNone () =
-            let ticker = (api :> IBitFinexApi).GetTickersAsync(PairClass("btc","usd"), None) |>  Async.AwaitTask |> Async.RunSynchronously
+            let ticker = (api :> IBitFinexApi).GetTickersAsync(pairBtcUsd, None) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(ticker <> BitFinexTicker.Default);
 
         [<TestMethod>]
         member this.GetTickersNotFound () =
             try
-                (api :> IBitFinexApi).GetTickers(PairClass("btc","mmm")) |> ignore
+                (api :> IBitFinexApi).GetTickers(pairBtcMmm) |> ignore
             with
                 | :? WebApiError as ex when ex.Code = 400 -> Assert.IsTrue(true);
                 | _ -> Assert.IsTrue(false);
@@ -240,7 +245,7 @@ module MSTests =
         [<TestMethod>]
         member this.AsyncGetTickersNotFound () =
             try
-                (api :> IBitFinexApi).AsyncGetTickers(PairClass("btc","mmm")) |> Async.RunSynchronously |> ignore
+                (api :> IBitFinexApi).AsyncGetTickers(pairBtcMmm) |> Async.RunSynchronously |> ignore
             with
                 | :? WebApiError as ex when ex.Code = 400 -> Assert.IsTrue(true);
                 | _ -> Assert.IsTrue(false);
@@ -249,37 +254,37 @@ module MSTests =
         member this.GetTickersAsyncNotFound () =
             try
                 let cts = new CancellationTokenSource()
-                (api :> IBitFinexApi).GetTickersAsync(PairClass("btc","mmm"), cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously |> ignore
+                (api :> IBitFinexApi).GetTickersAsync(pairBtcMmm, cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously |> ignore
             with
                 | :? AggregateException as ae when (ae.InnerException :? WebApiError) && ae.Message.Contains("Unknown Symbol from pair parameter") -> Assert.IsTrue(true)
                 | _ -> Assert.IsTrue(false);
 
         [<TestMethod>]
         member this.GetStats () =
-            let stats = (api :> IBitFinexApi).GetStats(PairClass("btc","usd"))
+            let stats = (api :> IBitFinexApi).GetStats(pairBtcUsd)
             Assert.IsTrue(stats |> (not << Seq.isEmpty));
 
         [<TestMethod>]
         member this.AsyncGetStats () =
-            let stats = (api :> IBitFinexApi).AsyncGetStats(PairClass("btc","usd")) |>  Async.RunSynchronously
+            let stats = (api :> IBitFinexApi).AsyncGetStats(pairBtcUsd) |>  Async.RunSynchronously
             Assert.IsTrue(stats |> (not << Seq.isEmpty));
 
         [<TestMethod>]
         member this.GetStatsAsync () =
-            let stats = (api :> IBitFinexApi).GetStatsAsync(PairClass("btc","usd")) |>  Async.AwaitTask |> Async.RunSynchronously
+            let stats = (api :> IBitFinexApi).GetStatsAsync(pairBtcUsd) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(stats |> (not << Seq.isEmpty));
 
         [<TestMethod>]
         member this.GetStatsAsyncCancellationToken () =
             let api = BitFinexApi(apiKey,apiSecret, 10000)
             let cts = new CancellationTokenSource()
-            let stats = (api :> IBitFinexApi).GetStatsAsync(PairClass("btc","usd"), cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
+            let stats = (api :> IBitFinexApi).GetStatsAsync(pairBtcUsd, cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(stats |> (not << Seq.isEmpty));
 
         [<TestMethod>]
         member this.GetStatsAsyncCancellationTokenCancel () =
                 let cts = new CancellationTokenSource()
-                let task = (api :> IBitFinexApi).GetStatsAsync(PairClass("btc","usd"), cts.Token) |>  Async.AwaitTask
+                let task = (api :> IBitFinexApi).GetStatsAsync(pairBtcUsd, cts.Token) |>  Async.AwaitTask
                 cts.Cancel() 
                 let stats = task |> Async.RunSynchronously
                 Assert.IsTrue(stats |> Seq.isEmpty);
@@ -287,64 +292,64 @@ module MSTests =
         [<TestMethod>]
         member this.GetStatsAsyncCancellationTokenOption () =
             let cts = new CancellationTokenSource()
-            let stats = (api :> IBitFinexApi).GetStatsAsync(PairClass("btc","usd"), Some cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
+            let stats = (api :> IBitFinexApi).GetStatsAsync(pairBtcUsd, Some cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(stats |> (not << Seq.isEmpty));
 
         [<TestMethod>]
         member this.GetStatsAsyncCancellationTokenOptionCancel () =
                 let cts = new CancellationTokenSource()
-                let task = (api :> IBitFinexApi).GetStatsAsync(PairClass("btc","usd"), Some cts.Token) |>  Async.AwaitTask 
+                let task = (api :> IBitFinexApi).GetStatsAsync(pairBtcUsd, Some cts.Token) |>  Async.AwaitTask 
                 cts.Cancel() 
                 let stats = task |> Async.RunSynchronously
                 Assert.IsTrue(stats |> Seq.isEmpty);
 
         [<TestMethod>]
         member this.GetStatsAsyncCancellationTokenOptionNone () =
-            let stats = (api :> IBitFinexApi).GetStatsAsync(PairClass("btc","usd"), None) |>  Async.AwaitTask |> Async.RunSynchronously
+            let stats = (api :> IBitFinexApi).GetStatsAsync(pairBtcUsd, None) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(stats |> (not << Seq.isEmpty));
 
         [<TestMethod>]
         member this.GetStatsNotFound () =
-            let stats = (api :> IBitFinexApi).GetStats(PairClass("btc","mmm"))
+            let stats = (api :> IBitFinexApi).GetStats(pairBtcMmm)
             Assert.IsTrue(stats |> Seq.isEmpty);
 
         [<TestMethod>]
         member this.AsyncGetStatsNotFound () =
-            let stats = (api :> IBitFinexApi).AsyncGetStats(PairClass("btc","mmm")) |>  Async.RunSynchronously
+            let stats = (api :> IBitFinexApi).AsyncGetStats(pairBtcMmm) |>  Async.RunSynchronously
             Assert.IsTrue(stats |> Seq.isEmpty);
 
         [<TestMethod>]
         member this.GetStatsAsyncNotFound () =
             let cts = new CancellationTokenSource()
-            let stats = (api :> IBitFinexApi).GetStatsAsync(PairClass("btc","mmm"), Some cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
+            let stats = (api :> IBitFinexApi).GetStatsAsync(pairBtcMmm, Some cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(stats |> Seq.isEmpty);
 
         [<TestMethod>]
         member this.GetOrderBook () =
-            let orderBook = (api :> IBitFinexApi).GetOrderBook(PairClass("btc","usd"))
+            let orderBook = (api :> IBitFinexApi).GetOrderBook(pairBtcUsd)
             Assert.IsTrue(orderBook.Exchange <> null);
 
         [<TestMethod>]
         member this.AsyncGetOrderBook () =
-            let orderBook = (api :> IBitFinexApi).AsyncGetOrderBook(PairClass("btc","usd")) |>  Async.RunSynchronously
+            let orderBook = (api :> IBitFinexApi).AsyncGetOrderBook(pairBtcUsd) |>  Async.RunSynchronously
             Assert.IsTrue(orderBook.Exchange <> null);
         
         [<TestMethod>]
         member this.GetOrderBookAsync () =
-            let orderBook = (api :> IBitFinexApi).GetOrderBookAsync(PairClass("btc","usd")) |>  Async.AwaitTask |> Async.RunSynchronously
+            let orderBook = (api :> IBitFinexApi).GetOrderBookAsync(pairBtcUsd) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(orderBook.Exchange <> null);
 
         [<TestMethod>]
         member this.GetOrderBookAsyncCancellationToken () =
             let cts = new CancellationTokenSource()
-            let orderBook = (api :> IBitFinexApi).GetOrderBookAsync(PairClass("btc","usd"), cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
+            let orderBook = (api :> IBitFinexApi).GetOrderBookAsync(pairBtcUsd, cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(orderBook.Exchange <> null);
 
         [<TestMethod>]
         member this.GetOrderBookAsyncCancellationTokenCancel () =
             try
                 let cts = new CancellationTokenSource()
-                let task = (api :> IBitFinexApi).GetOrderBookAsync(PairClass("btc","usd"), cts.Token) |>  Async.AwaitTask
+                let task = (api :> IBitFinexApi).GetOrderBookAsync(pairBtcUsd, cts.Token) |>  Async.AwaitTask
                 cts.Cancel() 
                 task |> Async.RunSynchronously |> ignore
             with
@@ -354,14 +359,14 @@ module MSTests =
         [<TestMethod>]
         member this.GetOrderBookAsyncCancellationTokenOption () =
             let cts = new CancellationTokenSource()
-            let orderBook = (api :> IBitFinexApi).GetOrderBookAsync(PairClass("btc","usd"), Some cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
+            let orderBook = (api :> IBitFinexApi).GetOrderBookAsync(pairBtcUsd, Some cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(orderBook.Exchange <> null);
 
         [<TestMethod>]
         member this.GetOrderBookAsyncCancellationTokenOptionCancel () =
             try
                 let cts = new CancellationTokenSource()
-                let task = (api :> IBitFinexApi).GetOrderBookAsync(PairClass("btc","usd"), cts.Token) |>  Async.AwaitTask
+                let task = (api :> IBitFinexApi).GetOrderBookAsync(pairBtcUsd, cts.Token) |>  Async.AwaitTask
                 cts.Cancel() 
                 task |> Async.RunSynchronously |> ignore
             with
@@ -370,41 +375,41 @@ module MSTests =
 
         [<TestMethod>]
         member this.GetOrderBookAsyncCancellationTokenOptionNone () =
-            let orderBook = (api :> IBitFinexApi).GetOrderBookAsync(PairClass("btc","usd"), None) |>  Async.AwaitTask |> Async.RunSynchronously
+            let orderBook = (api :> IBitFinexApi).GetOrderBookAsync(pairBtcUsd, None) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(orderBook.Exchange <> null);
 
         [<TestMethod>]
         member this.GetOrderBookNotFound () =
             try
-                let orderBook = (api :> IBitFinexApi).GetOrderBook(PairClass("btc","mmm"))
+                let orderBook = (api :> IBitFinexApi).GetOrderBook(pairBtcMmm)
                 Assert.IsFalse(orderBook.Exchange <> null);
             with _ -> Assert.IsTrue(true);
 
         [<TestMethod>]
         member this.GetTrades () =
-            let trades = (api :> IBitFinexApi).GetTrades(PairClass("btc","usd"))
+            let trades = (api :> IBitFinexApi).GetTrades(pairBtcUsd)
             Assert.IsTrue(trades |> (not << Seq.isEmpty));
 
         [<TestMethod>]
         member this.AsyncGetTrades () =
-            let trades = (api :> IBitFinexApi).AsyncGetTrades(PairClass("btc","usd")) |>  Async.RunSynchronously
+            let trades = (api :> IBitFinexApi).AsyncGetTrades(pairBtcUsd) |>  Async.RunSynchronously
             Assert.IsTrue(trades |> (not << Seq.isEmpty));
 
         [<TestMethod>]
         member this.GetTradesAsync () =
-            let trades = (api :> IBitFinexApi).GetTradesAsync(PairClass("btc","usd")) |>  Async.AwaitTask |> Async.RunSynchronously
+            let trades = (api :> IBitFinexApi).GetTradesAsync(pairBtcUsd) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(trades |> (not << Seq.isEmpty));
 
         [<TestMethod>]
         member this.GetTradesAsyncCancellationToken () =
             let cts = new CancellationTokenSource()
-            let trades = (api :> IBitFinexApi).GetTradesAsync(PairClass("btc","usd"), cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
+            let trades = (api :> IBitFinexApi).GetTradesAsync(pairBtcUsd, cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(trades |> (not << Seq.isEmpty));
 
         [<TestMethod>]
         member this.GetTradesAsyncCancellationTokenCancel () =
             let cts = new CancellationTokenSource()
-            let task = (api :> IBitFinexApi).GetTradesAsync(PairClass("btc","usd"), cts.Token) |>  Async.AwaitTask
+            let task = (api :> IBitFinexApi).GetTradesAsync(pairBtcUsd, cts.Token) |>  Async.AwaitTask
             cts.Cancel() 
             let trades = task |> Async.RunSynchronously
             Assert.IsTrue(trades |> Seq.isEmpty);
@@ -412,64 +417,64 @@ module MSTests =
         [<TestMethod>]
         member this.GetTradesAsyncCancellationTokenOption () =
             let cts = new CancellationTokenSource()
-            let trades = (api :> IBitFinexApi).GetTradesAsync(PairClass("btc","usd"), Some cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
+            let trades = (api :> IBitFinexApi).GetTradesAsync(pairBtcUsd, Some cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(trades |> (not << Seq.isEmpty));
 
 
         [<TestMethod>]
         member this.GetTradesAsyncCancellationTokenOptionCancel () =
             let cts = new CancellationTokenSource()
-            let task = (api :> IBitFinexApi).GetTradesAsync(PairClass("btc","usd"), Some cts.Token) |>  Async.AwaitTask
+            let task = (api :> IBitFinexApi).GetTradesAsync(pairBtcUsd, Some cts.Token) |>  Async.AwaitTask
             cts.Cancel() 
             let trades = task |> Async.RunSynchronously
             Assert.IsTrue(trades |> Seq.isEmpty);
 
         [<TestMethod>]
         member this.GetTradesAsyncCancellationTokenOptionNone () =
-            let trades = (api :> IBitFinexApi).GetTradesAsync(PairClass("btc","usd"), None) |>  Async.AwaitTask |> Async.RunSynchronously
+            let trades = (api :> IBitFinexApi).GetTradesAsync(pairBtcUsd, None) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(trades |> (not << Seq.isEmpty));
 
         [<TestMethod>]
         member this.GetTradesNotFound () =
-            let trades = (api :> IBitFinexApi).GetTrades(PairClass("btc","mmm"))
+            let trades = (api :> IBitFinexApi).GetTrades(pairBtcMmm)
             Assert.IsTrue(trades |> Seq.isEmpty);
 
         [<TestMethod>]
         member this.AsyncGetTradesNotFound () =
-            let trades = (api :> IBitFinexApi).AsyncGetTrades(PairClass("btc","mmm")) |>  Async.RunSynchronously
+            let trades = (api :> IBitFinexApi).AsyncGetTrades(pairBtcMmm) |>  Async.RunSynchronously
             Assert.IsTrue(trades |> Seq.isEmpty);
 
         [<TestMethod>]
         member this.GetTradesAsyncNotFound () =
             let cts = new CancellationTokenSource()
-            let trades = (api :> IBitFinexApi).GetTradesAsync(PairClass("btc","mmm"), cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
+            let trades = (api :> IBitFinexApi).GetTradesAsync(pairBtcMmm, cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(trades |> Seq.isEmpty);
 
         [<TestMethod>]
         member this.GetLends () =
-            let lands = (api :> IBitFinexApi).GetLends("btc")
+            let lands = (api :> IBitFinexApi).GetLends(btc)
             Assert.IsTrue(lands |> (not << Seq.isEmpty));
 
         [<TestMethod>]
         member this.AsyncGetLends () =
-            let lands = (api :> IBitFinexApi).AsyncGetLends("btc") |>  Async.RunSynchronously
+            let lands = (api :> IBitFinexApi).AsyncGetLends(btc) |>  Async.RunSynchronously
             Assert.IsTrue(lands |> (not << Seq.isEmpty));
 
         [<TestMethod>]
         member this.GetLendsAsync () =
-            let lands = (api :> IBitFinexApi).GetLendsAsync("btc") |>  Async.AwaitTask |> Async.RunSynchronously
+            let lands = (api :> IBitFinexApi).GetLendsAsync(btc) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(lands |> (not << Seq.isEmpty));
 
         [<TestMethod>]
         member this.GetLendsAsyncCancellationToken () =
             let cts = new CancellationTokenSource()
-            let lands = (api :> IBitFinexApi).GetLendsAsync("btc", cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
+            let lands = (api :> IBitFinexApi).GetLendsAsync(btc, cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(lands |> (not << Seq.isEmpty));
 
         [<TestMethod>]
         member this.GetLendsAsyncCancellationTokenCancel () =
             let cts = new CancellationTokenSource()
-            let task = (api :> IBitFinexApi).GetLendsAsync("btc", cts.Token) |>  Async.AwaitTask
+            let task = (api :> IBitFinexApi).GetLendsAsync(btc, cts.Token) |>  Async.AwaitTask
             cts.Cancel() 
             let lends = task |> Async.RunSynchronously
             Assert.IsTrue(lends |> Seq.isEmpty);
@@ -477,32 +482,32 @@ module MSTests =
         [<TestMethod>]
         member this.GetLendsAsyncCancellationTokenOption () =
             let cts = new CancellationTokenSource()
-            let lands = (api :> IBitFinexApi).GetLendsAsync("btc", Some cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
+            let lands = (api :> IBitFinexApi).GetLendsAsync(btc, Some cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(lands |> (not << Seq.isEmpty));
 
         [<TestMethod>]
         member this.GetLendsAsyncCancellationTokenOptionCancel () =
             let cts = new CancellationTokenSource()
-            let task = (api :> IBitFinexApi).GetLendsAsync("btc", Some cts.Token) |>  Async.AwaitTask
+            let task = (api :> IBitFinexApi).GetLendsAsync(btc, Some cts.Token) |>  Async.AwaitTask
             cts.Cancel() 
             let lends = task |> Async.RunSynchronously
             Assert.IsTrue(lends |> Seq.isEmpty);
 
         [<TestMethod>]
         member this.GetLendsAsyncCancellationTokenOptionNone () =
-            let lands = (api :> IBitFinexApi).GetLendsAsync("btc", None) |>  Async.AwaitTask |> Async.RunSynchronously
+            let lands = (api :> IBitFinexApi).GetLendsAsync(btc, None) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(lands |> (not << Seq.isEmpty));
 
         [<TestMethod>]
         member this.GetLendsNotFound () =
-            let lands = (api :> IBitFinexApi).GetLends("mmm")
+            let lands = (api :> IBitFinexApi).GetLends(mmm)
             Assert.IsTrue(lands |> Seq.isEmpty);
 
         [<TestMethod>]
         member this.AsyncGetLendsTimeout () =
             try
                 let apil = BitFinexApi(apiKey,apiSecret, 1)
-                (apil :> IBitFinexApi).AsyncGetLends("btc") |> Async.RunSynchronously |> ignore
+                (apil :> IBitFinexApi).AsyncGetLends(btc) |> Async.RunSynchronously |> ignore
                 Assert.IsTrue(false);
             with
             | :? System.Net.WebException as we when (we.InnerException :? TimeoutException) -> Assert.IsTrue(true);
@@ -512,7 +517,7 @@ module MSTests =
         member this.GetLendsTimeout () =
             try
                 let apil = BitFinexApi(apiKey,apiSecret, 1)
-                (apil :> IBitFinexApi).GetLends("btc") |> ignore
+                (apil :> IBitFinexApi).GetLends(btc) |> ignore
                 Assert.IsTrue(false);
             with
             | :? System.Net.WebException as we when (we.InnerException :? TimeoutException) -> Assert.IsTrue(true);
@@ -520,41 +525,41 @@ module MSTests =
 
         [<TestMethod>]
         member this.AsyncGetLendsNotFound () =
-            let lands = (api :> IBitFinexApi).AsyncGetLends("mmm") |> Async.RunSynchronously
+            let lands = (api :> IBitFinexApi).AsyncGetLends(mmm) |> Async.RunSynchronously
             Assert.IsTrue(lands |> Seq.isEmpty);
 
         [<TestMethod>]
         member this.GetLendsAsyncNotFound () =
             let cts = new CancellationTokenSource()
-            let lands = (api :> IBitFinexApi).GetLendsAsync("mmm", cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
+            let lands = (api :> IBitFinexApi).GetLendsAsync(mmm, cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(lands |> Seq.isEmpty);
 
         [<TestMethod>]
         member this.GetLendBook () =
-            let lendBook = (api :> IBitFinexApi).GetLendBook("btc")
+            let lendBook = (api :> IBitFinexApi).GetLendBook(btc)
             Assert.IsTrue(lendBook.Currency <> null);
 
         [<TestMethod>]
         member this.AsyncGetLendBook () =
-            let lendBook = (api :> IBitFinexApi).AsyncGetLendBook("btc") |> Async.RunSynchronously
+            let lendBook = (api :> IBitFinexApi).AsyncGetLendBook(btc) |> Async.RunSynchronously
             Assert.IsTrue(lendBook.Currency <> null);
         
         [<TestMethod>]
         member this.GetLendBookAsync() =
-            let lendBook = (api :> IBitFinexApi).GetLendBookAsync("btc") |>  Async.AwaitTask |> Async.RunSynchronously
+            let lendBook = (api :> IBitFinexApi).GetLendBookAsync(btc) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(lendBook.Currency <> null);
 
         [<TestMethod>]
         member this.GetLendBookAsyncCancellationToken() =
             let cts = new CancellationTokenSource()
-            let lendBook = (api :> IBitFinexApi).GetLendBookAsync("btc", cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
+            let lendBook = (api :> IBitFinexApi).GetLendBookAsync(btc, cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(lendBook.Currency <> null);
 
         [<TestMethod>]
         member this.GetLendBookAsyncCancellationTokenCancel() =
             try
                 let cts = new CancellationTokenSource()
-                let task = (api :> IBitFinexApi).GetLendBookAsync("btc", cts.Token) |>  Async.AwaitTask
+                let task = (api :> IBitFinexApi).GetLendBookAsync(btc, cts.Token) |>  Async.AwaitTask
                 cts.Cancel() 
                 task |> Async.RunSynchronously |> ignore
             with
@@ -564,7 +569,7 @@ module MSTests =
         [<TestMethod>]
         member this.GetLendBookAsyncCancellationTokenOption() =
             let cts = new CancellationTokenSource()
-            let lendBook = (api :> IBitFinexApi).GetLendBookAsync("btc", Some cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
+            let lendBook = (api :> IBitFinexApi).GetLendBookAsync(btc, Some cts.Token) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(lendBook.Currency <> null);
             Assert.IsTrue(lendBook.Asks |> (not << Seq.isEmpty));
             Assert.IsTrue(lendBook.Bids |> (not << Seq.isEmpty));
@@ -573,7 +578,7 @@ module MSTests =
         member this.GetLendBookAsyncCancellationTokenOptionCancel() =
             try
                 let cts = new CancellationTokenSource()
-                let task = (api :> IBitFinexApi).GetLendBookAsync("btc", Some cts.Token) |>  Async.AwaitTask
+                let task = (api :> IBitFinexApi).GetLendBookAsync(btc, Some cts.Token) |>  Async.AwaitTask
                 cts.Cancel() 
                 task |> Async.RunSynchronously |> ignore
             with
@@ -582,13 +587,13 @@ module MSTests =
 
         [<TestMethod>]
         member this.GetLendBookAsyncCancellationTokenOptionNone() =
-            let lendBook = (api :> IBitFinexApi).GetLendBookAsync("btc", None) |>  Async.AwaitTask |> Async.RunSynchronously
+            let lendBook = (api :> IBitFinexApi).GetLendBookAsync(btc, None) |>  Async.AwaitTask |> Async.RunSynchronously
             Assert.IsTrue(lendBook.Currency <> null);
 
         [<TestMethod>]
         member this.GetLendBookNotFound () =
             try
-                let lendBook = (api :> IBitFinexApi).GetLendBook("mmm")
+                let lendBook = (api :> IBitFinexApi).GetLendBook(mmm)
                 Assert.IsFalse(lendBook.Currency <> null);
             with 
                 | :? WebApiError as ex when ex.Code = 400 -> Assert.IsTrue(true);
@@ -597,7 +602,7 @@ module MSTests =
         [<TestMethod>]
         member this.AsyncGetLendBookNotFound () =
             try
-                let lendBook = (api :> IBitFinexApi).AsyncGetLendBook("mmm") |> Async.RunSynchronously
+                let lendBook = (api :> IBitFinexApi).AsyncGetLendBook(mmm) |> Async.RunSynchronously
                 Assert.IsFalse(lendBook.Currency <> null);
             with 
                 | :? WebApiError as ex when ex.Code = 400 -> Assert.IsTrue(true);
@@ -606,7 +611,7 @@ module MSTests =
         [<TestMethod>]
         member this.GetLendBookAsyncNotFound () =
             try
-                let lendBook = (api :> IBitFinexApi).GetLendBookAsync("mmm") |>  Async.AwaitTask |> Async.RunSynchronously
+                let lendBook = (api :> IBitFinexApi).GetLendBookAsync(mmm) |>  Async.AwaitTask |> Async.RunSynchronously
                 Assert.IsFalse(lendBook.Currency <> null);
             with 
                | :? AggregateException as agx when (agx.InnerException :? WebApiError) && (agx.InnerException :?> WebApiError).Code = 400 
@@ -638,5 +643,97 @@ module MSTests =
                 let result = JsonConvert.DeserializeObject<List<BitFinexAccountInfo>>(data)
                 Assert.IsTrue(result |> (not << Seq.isEmpty));
             with 
-
                | _ -> Assert.IsTrue(false);
+
+        
+        //[<TestMethod>]
+        member this.CancelAllOrdersEmptyOrderListTest() =
+            try
+                let response = api.AsyncCancelAllOrder() |>  Async.RunSynchronously
+                Assert.IsTrue(response.Result = "All orders cancelled");
+            with 
+               | _ -> Assert.IsTrue(false);
+        //[<TestMethod>]
+        member this.CancelAllOrdersTest() =
+            try
+                let order = new Order(PairClass("BTC","USD"), 0.00001m, 0.01m, "BitFinex", MarketSide.Bid, DateTime.UtcNow, OrderType.Limit, "ExternalExchange", String.Empty, "test", null, TimeInForce.FillOrKill, OrderStatus.New)
+                let data = api.AsyncNewOrder(order, BitFinexOrderSide.Buy, TypeExchangeLimit) |>  Async.RunSynchronously
+                Assert.IsNotNull(data)
+                let response = api.AsyncCancelAllOrder() |>  Async.RunSynchronously
+                Assert.IsNotNull(response)
+                Assert.IsTrue(response.Result = "All orders cancelled")
+
+                let activeOrders = api.AsyncGetActiveOrders() |>  Async.RunSynchronously
+                Assert.IsNotNull(activeOrders);
+            with 
+               | _ -> Assert.IsTrue(false);
+        
+        //[<TestMethod>]
+        member this.GetOrderStatusBitFinexTest() =
+            try
+                let order = new Order(PairClass("BTC","USD"), 20000m, 0.00001m, "BitFinex", MarketSide.Ask, DateTime.UtcNow, OrderType.Limit, "ExternalExchange", String.Empty, "test", null, TimeInForce.FillOrKill, OrderStatus.New)
+                let response = api.AsyncCancelAllOrder() |>  Async.RunSynchronously
+                Assert.IsNotNull(response)
+
+                let data = api.AsyncNewOrder(order, BitFinexOrderSide.Sell, TypeExchangeLimit) |>  Async.RunSynchronously
+                Assert.IsNotNull(data)
+                Assert.IsTrue(data.OrderId > 0)
+
+                let cancelOrderStatus = api.AsyncCancelOrder(data.OrderId) |>  Async.RunSynchronously
+                Assert.IsTrue(cancelOrderStatus.Id > 0)
+                Thread.Sleep(TimeSpan.FromSeconds(1.0))
+                let orderStatus = api.AsyncGetOrderStatus(data.OrderId) |>  Async.RunSynchronously
+                Assert.IsNotNull(orderStatus);
+
+                let response = api.AsyncCancelAllOrder() |>  Async.RunSynchronously
+                Assert.IsNotNull(response)
+                Assert.IsTrue(response.Result = "All orders cancelled")
+
+                let activeOrders = api.AsyncGetActiveOrders() |>  Async.RunSynchronously
+                Assert.IsNotNull(activeOrders);
+            with 
+               | _ -> Assert.IsTrue(false);
+
+        //[<TestMethod>]
+        member this.PlaceBitFinexOrderSellTest() =
+            try
+                let order = new Order(PairClass("BTC","USD"), 227m, 0.1m, "BitFinex", MarketSide.Bid, DateTime.UtcNow, OrderType.Limit, "ExternalExchange", String.Empty, "test", null, TimeInForce.FillOrKill, OrderStatus.New)
+                let data = api.AsyncNewOrder(order, BitFinexOrderSide.Buy, TypeExchangeLimit) |>  Async.RunSynchronously
+                Assert.IsNotNull(data)
+                Assert.IsTrue(data.OrderId > 0)
+
+                let order = order.UpdateOrderId(data.OrderId.ToString());
+                Assert.IsNotNull(order);
+
+                let response = api.AsyncCancelAllOrder() |>  Async.RunSynchronously
+                Assert.IsNotNull(response)
+            with 
+               | _ -> Assert.IsTrue(false);
+
+        //[<TestMethod>]
+        member this.PlaceBitFinexOrderBuyTest() =
+            try
+                let order = new Order(PairClass("BTC","USD"), 23264m, 0.01m, "BitFinex", MarketSide.Ask, DateTime.UtcNow, OrderType.Limit, "ExternalExchange", String.Empty, "test", null, TimeInForce.FillOrKill, OrderStatus.New)
+                let response = api.AsyncCancelAllOrder() |>  Async.RunSynchronously
+
+                Assert.IsNotNull(response)
+
+                let data = api.AsyncNewOrder(order, BitFinexOrderSide.Sell, TypeExchangeLimit) |>  Async.RunSynchronously
+                Assert.IsNotNull(data)
+                Assert.IsTrue(data.OrderId > 0)
+
+                let order = order.UpdateOrderId(data.OrderId.ToString())
+                Assert.IsNotNull(order)
+
+                let activeOrders = api.AsyncGetActiveOrders() |>  Async.RunSynchronously
+                Assert.IsNotNull(activeOrders)
+
+                let orderStatus = api.AsyncCancelOrder(data.OrderId) |>  Async.RunSynchronously
+                Assert.IsTrue(orderStatus.Id > 0)
+
+                let response = api.AsyncCancelAllOrder() |>  Async.RunSynchronously
+                Assert.IsNotNull(response)
+                Assert.IsTrue(response.Result = "All orders cancelled")
+            with 
+               | _ -> Assert.IsTrue(false);
+
